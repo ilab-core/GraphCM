@@ -149,6 +149,8 @@ def valid(args, dataset):
         summary_writer.add_scalar('final_valid/avg_perplexity', sum_perplexity / (i + 1), i)
         summary_writer.add_scalar('final_valid/click_loss', valid_click_loss, i)
         summary_writer.add_scalar('final_valid/perplexity', perplexity, i)
+        print(f"✅ Valid Click Loss: {valid_click_loss:.4f}")
+        print(f"✅ Valid Perplexity: {perplexity:.4f}")
 
 def test(args, dataset):
     """
@@ -173,6 +175,8 @@ def test(args, dataset):
         summary_writer.add_scalar('final_test/avg_perplexity', sum_perplexity / (i + 1), i)
         summary_writer.add_scalar('final_test/click_loss', test_click_loss, i)
         summary_writer.add_scalar('final_test/perplexity', perplexity, i)
+        print(f"✅ Test Click Loss: {test_click_loss:.4f}") # Print click loss for each iteration
+        print(f"✅ Test Perplexity: {perplexity:.4f}") # Print perplexity for each iteration
 
 def rank(args, dataset):
     """
