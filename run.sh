@@ -1,4 +1,4 @@
-python -u run.py --train --optim adam --eval_freq 100 --check_point 100 \
+python -u run.py --train --optim adam --eval_freq 500 --check_point 500 \
 --dataset demo --combine exp_mul \
 --gnn_neigh_sample 0 --gnn_concat False --inter_neigh_sample 0 \
 --learning_rate 0.001 --lr_decay 0.5 --weight_decay 1e-5 --dropout_rate 0.5 \
