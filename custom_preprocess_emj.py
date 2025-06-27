@@ -52,9 +52,19 @@ def write_quid_txt_files(sessions, path, prefix, query_qid, url_uid):
         for sess in sessions:
             sid = sess['sid']
             for qid, uids, clicks in zip(sess['qids'], sess['uidsS'], sess['clicksS']):
+                # Doküman sayısını 10'a sabitle
+                if len(uids) < 10:
+                    pad_len = 10 - len(uids)
+                    uids += [0] * pad_len
+                    clicks += [0] * pad_len
+                elif len(uids) > 10:
+                    uids = uids[:10]
+                    clicks = clicks[:10]
+
                 qid_out = query_qid.get(str(qid), 0)
                 uids_out = [url_uid.get(str(uid), 0) for uid in uids]
-                f.write(f"{sid}\t{qid_out}\t{json.dumps(uids_out)}\t{json.dumps([1]*10)}\t{json.dumps(clicks)}\n")
+                f.write(f"{sid}\t{qid_out}\t{json.dumps(uids_out)}\t{json.dumps([0]*10)}\t{json.dumps(clicks)}\n")
+
 
 def main():
     parser = argparse.ArgumentParser()
