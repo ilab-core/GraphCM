@@ -141,6 +141,7 @@ class Model(object):
                 if valid_perplexity < metric_save:
                     metric_save = valid_perplexity
                     patience = 0
+                    self.save_model(save_dir, save_prefix, suffix='best') #added suffix for best model
                 else:
                     patience += 1
                 if patience >= self.patience:
@@ -237,13 +238,23 @@ class Model(object):
         """
         return sum([(2 ** relevance - 1) / math.log(rank + 2, 2) for rank, relevance in enumerate(ranking_relevances)])
 
-    def save_model(self, model_dir, model_prefix):
+    #def save_model(self, model_dir, model_prefix):
+    def save_model(self, model_dir, model_prefix, suffix=None):
         """
         Save the model into model_dir with model_prefix as the model indicator
         """
-        torch.save(self.model.state_dict(), os.path.join(model_dir, model_prefix+'_{}.model'.format(self.global_step)))
-        torch.save(self.optimizer.state_dict(), os.path.join(model_dir, model_prefix + '_{}.optimizer'.format(self.global_step)))
-        self.logger.info('Model and optimizer saved in {}, with prefix {} and global step {}.'.format(model_dir, model_prefix, self.global_step))
+        #torch.save(self.model.state_dict(), os.path.join(model_dir, model_prefix+'_{}.model'.format(self.global_step)))
+        #torch.save(self.optimizer.state_dict(), os.path.join(model_dir, model_prefix + '_{}.optimizer'.format(self.global_step)))
+        #self.logger.info('Model and optimizer saved in {}, with prefix {} and global step {}.'.format(model_dir, model_prefix, self.global_step))
+        
+        suffix = f'_{suffix}' if suffix else f'_{self.global_step}'
+        model_path = os.path.join(model_dir, model_prefix + f'{suffix}.model')
+        optimizer_path = os.path.join(model_dir, model_prefix + f'{suffix}.optimizer')
+        
+        torch.save(self.model.state_dict(), model_path)
+        torch.save(self.optimizer.state_dict(), optimizer_path)
+        
+        self.logger.info(f"Model saved at step {self.global_step} with suffix: {suffix}")
 
     def load_model(self, model_dir, model_prefix, global_step):
         """
