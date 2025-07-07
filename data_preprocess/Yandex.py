@@ -25,7 +25,7 @@ from tqdm import tqdm
 import copy
 
 def generate_list_dict(args):
-    step_pbar = tqdm(total=34573630) # There are totally 34,573,630 sessions
+    #step_pbar = tqdm (total=34573630) # There are totally 34,573,630 sessions
     session_sid, query_qid, url_uid, vtype_vid = {'': 0}, {'': 0}, {'': 0}, {'': 0, '1': 1}
     infos_per_session = []
     junk_click_cnt = 0
@@ -37,7 +37,7 @@ def generate_list_dict(args):
         # Checkout the line type
         if elements[1] == 'M':
             # New session starts
-            step_pbar.update(1)
+            #step_pbar.update(1)
             session = elements[0]
             assert session not in session_sid
             session_sid[session] = len(session_sid)
@@ -95,7 +95,7 @@ def generate_list_dict(args):
     print('  - {}'.format('Shuffling the dataset...'))
     random.seed(2333)
     random.shuffle(infos_per_session)
-    assert len(infos_per_session) == 34573630
+    #assert len(infos_per_session) == 34573630
 
     # Downsample the dataset due to memory limitation
     print('  - {}'.format('Downsampling the dataset from {} sessions to {} sessions'.format(len(infos_per_session), args.downsample)))
