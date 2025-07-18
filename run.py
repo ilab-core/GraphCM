@@ -6,11 +6,14 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import pickle
 import argparse
 import logging
+import torch  # <-- new
+import config # <-- new
 from dataset import Dataset
 from model import Model
 from utils import *
 import pprint
 from tensorboardX import SummaryWriter
+
 
 def parse_args():
     """
@@ -205,49 +208,83 @@ def run():
     """
     Prepares and runs the whole system.
     """
-    # get arguments
-    args = parse_args()
-    assert args.batch_size % args.gpu_num == 0
-    assert args.hidden_size % 2 == 0
+    # --- SLACK ENTEGRASYONU BAŞLANGIÇ ---
+    try:
+        # get arguments
+        args = parse_args()
+        
+        # Süreç başladığında, hangi argümanlarla başladığını da bildiriyoruz.
+        send_slack_message(config.SLACK_CONFIG, f"🚀 GraphCM Modeli Süreci Başladı.\n> `Arguments: {args}`")
 
-    # create a logger
-    logger = logging.getLogger("GraphCM")
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(message)s')
-    check_path(args.model_dir)
-    check_path(args.result_dir)
-    check_path(args.summary_dir)
-    if args.log_dir:
-        check_path(args.log_dir)
-        file_handler = logging.FileHandler(args.log_dir + time.strftime('%Y-%m-%d-%H:%M:%S',time.localtime(time.time())) + '.txt')
-        file_handler.setLevel(logging.INFO)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    else:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
+        # CUDA (GPU) KONTROLÜ
+        if torch.cuda.is_available():
+            gpu_count = torch.cuda.device_count()
+            gpu_name = torch.cuda.get_device_name(0)
+            cuda_message = f"✅ CUDA (GPU) bulundu! Kullanılabilir {gpu_count} GPU.\n> `Device 0: {gpu_name}`"
+            send_slack_message(config.SLACK_CONFIG, cuda_message)
+        else:
+            cuda_message = "⚠️ UYARI: CUDA (GPU) bulunamadı. İşlemler CPU üzerinde devam edecek."
+            send_slack_message(config.SLACK_CONFIG, cuda_message)
 
-    logger.info('Running with args : {}'.format(args))
+        assert args.batch_size % args.gpu_num == 0
+        assert args.hidden_size % 2 == 0
 
-    logger.info('Checking the directories...')
-    for dir_path in [args.model_dir, args.result_dir, args.summary_dir]:
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
+        # create a logger
+        logger = logging.getLogger("GraphCM")
+        logger.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(message)s')
+        check_path(args.model_dir)
+        check_path(args.result_dir)
+        check_path(args.summary_dir)
+        if args.log_dir:
+            check_path(args.log_dir)
+            file_handler = logging.FileHandler(args.log_dir + time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time())) + '.txt')
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        else:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
 
-    logger.info('Loading train/valid/test/label/graph data...')
-    dataset = Dataset(args)
-    
-    if args.train:
-        train(args, dataset)
-    if args.valid:
-        valid(args, dataset)
-    if args.test:
-        test(args, dataset)
-    if args.rank:
-        rank(args, dataset)
-    logger.info('run done.')
+        logger.info('Running with args : {}'.format(args))
+
+        logger.info('Checking the directories...')
+        for dir_path in [args.model_dir, args.result_dir, args.summary_dir]:
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+
+        logger.info('Loading train/valid/test/label/graph data...')
+        dataset = Dataset(args)
+        send_slack_message(config.SLACK_CONFIG, "ℹ️ Veri seti başarıyla yüklendi.")
+        
+        if args.train:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Model eğitimi (`--train`) başlıyor...")
+            train(args, dataset)
+        if args.valid:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Model doğrulaması (`--valid`) başlıyor...")
+            valid(args, dataset)
+        if args.test:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Model testi (`--test`) başlıyor...")
+            test(args, dataset)
+        if args.rank:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Model sıralama (`--rank`) işlemi başlıyor...")
+            rank(args, dataset)
+            
+        logger.info('run done.')
+        send_slack_message(config.SLACK_CONFIG, "GraphCM Modeli Süreci Başarıyla Tamamlandı!")
+
+    except KeyboardInterrupt:
+        print("\nSüreç kullanıcı tarafından manuel olarak durduruldu.")
+        send_slack_message(config.SLACK_CONFIG, "UYARI: Süreç kullanıcı tarafından manuel olarak durduruldu.")
+
+    except Exception as e:
+        # Hata durumunda detaylı bir bildirim gönder
+        error_message = f"HATA: GraphCM Modeli çalışırken bir sorun oluştu!\n> *Hata Mesajı:*\n> ```{e}```"
+        send_slack_message(config.SLACK_CONFIG, error_message)
+        # Hatayı tekrar fırlatarak programın normal şekilde (hata koduyla) sonlanmasını sağla
+        raise e
 
 if __name__ == '__main__':
     run()

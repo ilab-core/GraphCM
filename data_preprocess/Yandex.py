@@ -1,28 +1,33 @@
 # !/usr/bin/python
 # coding: utf8
 
-from xml.dom.minidom import parse
-import xml.dom.minidom
+import os
+import sys
+import argparse
+import re
 import time
 import pprint
 import string
-import sys
-sys.path.append("..")
-import argparse
-import re
-import os
+import json
+import random
+import datetime as dt
 import numpy as np
 import torch
 import torch.nn as nn
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils import *
-from math import log
-import random
-import json
 import matplotlib.pyplot as plt
-from itertools import groupby
 from tqdm import tqdm
+from math import log
+from itertools import groupby
 import copy
+
+# PATH ayarları
+ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+sys.path.append(os.path.join(ROOT_DIR, '..'))           # utils.py ve dataset.py gibi dosyalar için
+
+# Custom modüller
+from utils import *
+import config  
+
 
 def generate_list_dict(args):
     #step_pbar = tqdm (total=34573630) # There are totally 34,573,630 sessions
@@ -88,7 +93,8 @@ def generate_list_dict(args):
                 infos_per_session[-1]['clicksS'][-1][clicked_idx] = 1
         else:
             print(line)
-            raise NotImplementedError('Unsupported line type: {}'.format(line_type))
+            #raise NotImplementedError('Unsupported line type: {}'.format(line_type))
+            raise NotImplementedError(f"Unsupported line type: {elements[2]}")
     print('  - {}'.format('Abandon {} junk click information'.format(junk_click_cnt)))
 
     # Shuffle the dataset
@@ -156,7 +162,8 @@ def generate_train_valid_test(args):
                         url_uid[uid] = len(url_uid)
                 qid_print = query_qid[qid]
                 uids_print = [url_uid[uid] for uid in uids]
-                file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_print, str(uids_print), str([1] * 10), str(clicks)))
+                #file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_print, str(uids_print), str([1] * 10), str(clicks)))
+                file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_print, str(uids_print), str([0] * 10), str(clicks)))
 
     print('  - {}'.format('Save rebuilt query_qid/url_uid back to files...'))
     save_dict(args.output, 'query_qid.dict', query_qid)
@@ -490,27 +497,46 @@ def main():
                         help='ratio of the valid session/query according to the total number of sessions')
     args = parser.parse_args()
     
-    if args.list_dict:
-        # generate list & dict files
-        print('===> {}'.format('generating train & valid & test data txt...'))
-        generate_list_dict(args)
-    if args.train_valid_test_data:
-        # load lists saved by generate_dict_list() and generates train.txt & valid.txt & test.txt
-        print('===> {}'.format('generating train & valid & test data txt...'))
-        generate_train_valid_test(args)
-    if args.dgat:
-        # construct graph for double GAT
-        print('===> {}'.format('generating graph for double GAT...'))
-        construct_dgat_graph(args)
-    if args.cold_start:
-        # construct dataset for studying cold start problems
-        print('===> {}'.format('generating dataset for studying cold start problems...'))
-        generate_dataset_for_cold_start(args)
-    if args.sparsity:
-        # compute sparisity for the dataset
-        print('===> {}'.format('compute sparisity for the dataset...'))
-        compute_sparsity(args)
-    print('===> {}'.format('Done.'))
+    # --- SLACK ENTEGRASYONU BAŞLANGIÇ ---
+    send_slack_message(config.SLACK_CONFIG, f"Yandex.py Veri Ön İşleme Süreci Başladı.\n> `Arguments: {args}`")
+    
+    try:
+        # --- ANA İŞLEMLER ---
+        if args.list_dict:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Adım: `list_dict` oluşturma işlemi başlıyor...")
+            generate_list_dict(args)
+            send_slack_message(config.SLACK_CONFIG, "✅ Adım: `list_dict` oluşturma tamamlandı.")
+
+        if args.train_valid_test_data:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Adım: `train/valid/test` verisi oluşturma işlemi başlıyor...")
+            generate_train_valid_test(args)
+            send_slack_message(config.SLACK_CONFIG, "✅ Adım: `train/valid/test` verisi oluşturma tamamlandı.")
+
+        if args.dgat:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Adım: `dgat` grafiği oluşturma işlemi başlıyor...")
+            construct_dgat_graph(args)
+            send_slack_message(config.SLACK_CONFIG, "✅ Adım: `dgat` grafiği oluşturma tamamlandı.")
+
+        if args.cold_start:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Adım: `cold_start` veri seti oluşturma işlemi başlıyor...")
+            generate_dataset_for_cold_start(args)
+            send_slack_message(config.SLACK_CONFIG, "✅ Adım: `cold_start` veri seti oluşturma tamamlandı.")
+
+        if args.sparsity:
+            send_slack_message(config.SLACK_CONFIG, "➡️ Adım: `sparsity` hesaplama işlemi başlıyor...")
+            compute_sparsity(args)
+            send_slack_message(config.SLACK_CONFIG, "✅ Adım: `sparsity` hesaplama tamamlandı.")
+
+        print('===> {}'.format('Done.'))
+        # Tüm adımlar bittiğinde genel bir başarı mesajı gönderiyoruz.
+        send_slack_message(config.SLACK_CONFIG, "Yandex.py Veri Ön İşleme Süreci Başarıyla Tamamlandı!")
+
+    except Exception as e:
+        # Hata durumunda detaylı bir bildirim gönder
+        error_message = f"HATA: Yandex.py çalışırken bir sorun oluştu!\n> *Hata Mesajı:*\n> ```{e}```"
+        send_slack_message(config.SLACK_CONFIG, error_message)
+        # Hatayı tekrar fırlatarak programın normal şekilde (hata koduyla) sonlanmasını sağla
+        raise e
     
 if __name__ == '__main__':
     main()
