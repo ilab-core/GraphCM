@@ -3,7 +3,7 @@ import pprint
 import copy
 import sys
 import datetime as dt
-from ilab_tools.ilab_tools.slack import send_message
+from ilab_tools.slack import send_message
 
 
 def check_path(file_path):

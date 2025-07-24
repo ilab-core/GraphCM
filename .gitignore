@@ -11,8 +11,7 @@ __pycache__
 */models/*
 whl/*
 graphcm-env/
-config.py
 data/
 my_data/
 test_slack.py
-
+.env
