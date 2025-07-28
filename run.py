@@ -1,18 +1,18 @@
 # encoding:utf-8
-import sys
-import time
-import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-import pickle
 import argparse
 import logging
+import os
+import time
+
 import torch  # <-- new
-import config # <-- new
+from tensorboardX import SummaryWriter
+
+import config  # <-- new
 from dataset import Dataset
 from model import Model
 from utils import *
-import pprint
-from tensorboardX import SummaryWriter
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def parse_args():
@@ -87,32 +87,33 @@ def parse_args():
 
     path_settings = parser.add_argument_group('path settings')
     path_settings.add_argument('--dataset', default='TianGong-ST',
-                                help='name of the dataset to be used')
+                               help='name of the dataset to be used')
     path_settings.add_argument('--model_dir', default='./outputs/models/',
-                                help='the dir to store models')
+                               help='the dir to store models')
     path_settings.add_argument('--result_dir', default='./outputs/results/',
-                                help='the dir to output the results')
+                               help='the dir to output the results')
     path_settings.add_argument('--summary_dir', default='./outputs/summary/',
-                                help='the dir to write tensorboard summary')
+                               help='the dir to write tensorboard summary')
     path_settings.add_argument('--log_dir', default='./outputs/log/',
-                                help='path of the log file. If not set, logs are printed to console')
+                               help='path of the log file. If not set, logs are printed to console')
 
     path_settings.add_argument('--eval_freq', type=int, default=100,
-                                help='the frequency of evaluating on the valid set when training')
+                               help='the frequency of evaluating on the valid set when training')
     path_settings.add_argument('--check_point', type=int, default=100,
-                                help='the frequency of saving model')
+                               help='the frequency of saving model')
     path_settings.add_argument('--patience', type=int, default=5,
-                                help='lr decay when more than the patience times of evaluation where loss/ppl do not decrease')
+                               help='lr decay when more than the patience times of evaluation where loss/ppl do not decrease')
     path_settings.add_argument('--lr_decay', type=float, default=0.5,
-                                help='lr decay')
+                               help='lr decay')
     path_settings.add_argument('--load_model', type=int, default=-1,
-                                help='load model global step')
+                               help='load model global step')
     path_settings.add_argument('--data_parallel', type=bool, default=False,
-                                help='data_parallel')
+                               help='data_parallel')
     path_settings.add_argument('--gpu_num', type=int, default=1,
-                                help='gpu_num')
+                               help='gpu_num')
 
     return parser.parse_args()
+
 
 def train(args, dataset):
     """
@@ -120,14 +121,17 @@ def train(args, dataset):
     """
     logger = logging.getLogger("GraphCM")
     logger.info('Initialize the model...')
-    model = Model(args, dataset.query_size, dataset.doc_size, dataset.vtype_size, dataset)
+    model = Model(args, dataset.query_size, dataset.doc_size,
+                  dataset.vtype_size, dataset)
     logger.info('model.global_step: {}'.format(model.global_step))
     if args.load_model > -1:
         logger.info('Reloading the model...')
-        model.load_model(model_dir=args.model_dir, model_prefix=args.algo, global_step=args.load_model)
+        model.load_model(model_dir=args.model_dir,
+                         model_prefix=args.algo, global_step=args.load_model)
     logger.info('Training the model...')
     model.train(dataset)
     logger.info('Done with model training!')
+
 
 def valid(args, dataset):
     """
@@ -135,25 +139,34 @@ def valid(args, dataset):
     """
     logger = logging.getLogger("GraphCM")
     logger.info('Initialize the model...')
-    model = Model(args, dataset.query_size, dataset.doc_size, dataset.vtype_size, dataset)
+    model = Model(args, dataset.query_size, dataset.doc_size,
+                  dataset.vtype_size, dataset)
     logger.info('model.global_step: {}'.format(model.global_step))
-    assert args.load_model > -1, 'args.load_model is required to specify the model file to be loaded!'
+    assert args.load_model > - \
+        1, 'args.load_model is required to specify the model file to be loaded!'
     logger.info('Reloading the model...')
-    model.load_model(model_dir=args.model_dir, model_prefix=args.algo, global_step=args.load_model)
+    model.load_model(model_dir=args.model_dir,
+                     model_prefix=args.algo, global_step=args.load_model)
     logger.info('Evaluating the model on valid set...')
     summary_writer = SummaryWriter(args.summary_dir)
     sum_click_loss, sum_perplexity = 0.0, 0.0
     for i in range(args.num_iter):
-        valid_batches = dataset.gen_mini_batches('valid', dataset.validset_size, shuffle=False)
-        valid_click_loss, valid_rel_loss, perplexity = model.evaluate(valid_batches, dataset)
+        valid_batches = dataset.gen_mini_batches(
+            'valid', dataset.validset_size, shuffle=False)
+        valid_click_loss, valid_rel_loss, perplexity = model.evaluate(
+            valid_batches, dataset)
         sum_click_loss += valid_click_loss
         sum_perplexity += perplexity
-        summary_writer.add_scalar('final_valid/avg_click_loss', sum_click_loss / (i + 1), i)
-        summary_writer.add_scalar('final_valid/avg_perplexity', sum_perplexity / (i + 1), i)
-        summary_writer.add_scalar('final_valid/click_loss', valid_click_loss, i)
+        summary_writer.add_scalar(
+            'final_valid/avg_click_loss', sum_click_loss / (i + 1), i)
+        summary_writer.add_scalar(
+            'final_valid/avg_perplexity', sum_perplexity / (i + 1), i)
+        summary_writer.add_scalar(
+            'final_valid/click_loss', valid_click_loss, i)
         summary_writer.add_scalar('final_valid/perplexity', perplexity, i)
         print(f"✅ Valid Click Loss: {valid_click_loss:.4f}")
         print(f"✅ Valid Perplexity: {perplexity:.4f}")
+
 
 def test(args, dataset):
     """
@@ -161,25 +174,35 @@ def test(args, dataset):
     """
     logger = logging.getLogger("GraphCM")
     logger.info('Initialize the model...')
-    model = Model(args, dataset.query_size, dataset.doc_size, dataset.vtype_size, dataset)
+    model = Model(args, dataset.query_size, dataset.doc_size,
+                  dataset.vtype_size, dataset)
     logger.info('model.global_step: {}'.format(model.global_step))
-    assert args.load_model > -1, 'args.load_model is required to specify the model file to be loaded!'
+    assert args.load_model > - \
+        1, 'args.load_model is required to specify the model file to be loaded!'
     logger.info('Reloading the model...')
-    model.load_model(model_dir=args.model_dir, model_prefix=args.algo, global_step=args.load_model)
+    model.load_model(model_dir=args.model_dir,
+                     model_prefix=args.algo, global_step=args.load_model)
     logger.info('Predict on test files...')
     summary_writer = SummaryWriter(args.summary_dir)
     sum_click_loss, sum_perplexity = 0.0, 0.0
     for i in range(args.num_iter):
-        test_batches = dataset.gen_mini_batches('test', dataset.testset_size, shuffle=False)
-        test_click_loss, test_rel_loss, perplexity = model.evaluate(test_batches, dataset)
+        test_batches = dataset.gen_mini_batches(
+            'test', dataset.testset_size, shuffle=False)
+        test_click_loss, test_rel_loss, perplexity = model.evaluate(
+            test_batches, dataset)
         sum_click_loss += test_click_loss
         sum_perplexity += perplexity
-        summary_writer.add_scalar('final_test/avg_click_loss', sum_click_loss / (i + 1), i)
-        summary_writer.add_scalar('final_test/avg_perplexity', sum_perplexity / (i + 1), i)
+        summary_writer.add_scalar(
+            'final_test/avg_click_loss', sum_click_loss / (i + 1), i)
+        summary_writer.add_scalar(
+            'final_test/avg_perplexity', sum_perplexity / (i + 1), i)
         summary_writer.add_scalar('final_test/click_loss', test_click_loss, i)
         summary_writer.add_scalar('final_test/perplexity', perplexity, i)
-        print(f"✅ Test Click Loss: {test_click_loss:.4f}") # Print click loss for each iteration
-        print(f"✅ Test Perplexity: {perplexity:.4f}") # Print perplexity for each iteration
+        # Print click loss for each iteration
+        print(f"✅ Test Click Loss: {test_click_loss:.4f}")
+        # Print perplexity for each iteration
+        print(f"✅ Test Perplexity: {perplexity:.4f}")
+
 
 def rank(args, dataset):
     """
@@ -187,23 +210,30 @@ def rank(args, dataset):
     """
     logger = logging.getLogger("GraphCM")
     logger.info('Initialize the model...')
-    model = Model(args, dataset.query_size, dataset.doc_size, dataset.vtype_size, dataset)
+    model = Model(args, dataset.query_size, dataset.doc_size,
+                  dataset.vtype_size, dataset)
     logger.info('model.global_step: {}'.format(model.global_step))
-    assert args.load_model > -1, 'args.load_model is required to specify the model file to be loaded!'
+    assert args.load_model > - \
+        1, 'args.load_model is required to specify the model file to be loaded!'
     logger.info('Reloading the model...')
-    model.load_model(model_dir=args.model_dir, model_prefix=args.algo, global_step=args.load_model)
+    model.load_model(model_dir=args.model_dir,
+                     model_prefix=args.algo, global_step=args.load_model)
     logger.info('Start computing NDCG@k for ranking performance')
     trunc_levels = [1, 3, 5, 10]
     sum_ndcgs = {trunc_level: 0.0 for trunc_level in trunc_levels}
     summary_writer = SummaryWriter(args.summary_dir)
     for i in range(args.num_iter):
-        label_batches = dataset.gen_mini_batches('label', dataset.labelset_size, shuffle=False)
+        label_batches = dataset.gen_mini_batches(
+            'label', dataset.labelset_size, shuffle=False)
         ndcgs = model.ranking(label_batches, dataset)
         for trunc_level in trunc_levels:
             sum_ndcgs[trunc_level] += ndcgs[trunc_level]
-            summary_writer.add_scalar('final_NDCG/avg_{}'.format(trunc_level), sum_ndcgs[trunc_level] / (i + 1), i)
-            summary_writer.add_scalar('final_NDCG/{}'.format(trunc_level), ndcgs[trunc_level], i)
-        
+            summary_writer.add_scalar(
+                'final_NDCG/avg_{}'.format(trunc_level), sum_ndcgs[trunc_level] / (i + 1), i)
+            summary_writer.add_scalar(
+                'final_NDCG/{}'.format(trunc_level), ndcgs[trunc_level], i)
+
+
 def run():
     """
     Prepares and runs the whole system.
@@ -212,9 +242,10 @@ def run():
     try:
         # get arguments
         args = parse_args()
-        
+
         # Süreç başladığında, hangi argümanlarla başladığını da bildiriyoruz.
-        send_slack_message(config.SLACK_CONFIG, f"🚀 GraphCM Modeli Süreci Başladı.\n> `Arguments: {args}`")
+        send_slack_message(
+            config.SLACK_CONFIG, f"🚀 GraphCM Modeli Süreci Başladı.\n> `Arguments: {args}`")
 
         # CUDA (GPU) KONTROLÜ
         if torch.cuda.is_available():
@@ -226,9 +257,6 @@ def run():
             cuda_message = "⚠️ UYARI: CUDA (GPU) bulunamadı. İşlemler CPU üzerinde devam edecek."
             send_slack_message(config.SLACK_CONFIG, cuda_message)
 
-        assert args.batch_size % args.gpu_num == 0
-        assert args.hidden_size % 2 == 0
-
         # create a logger
         logger = logging.getLogger("GraphCM")
         logger.setLevel(logging.INFO)
@@ -238,7 +266,8 @@ def run():
         check_path(args.summary_dir)
         if args.log_dir:
             check_path(args.log_dir)
-            file_handler = logging.FileHandler(args.log_dir + time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time())) + '.txt')
+            file_handler = logging.FileHandler(
+                args.log_dir + time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time())) + '.txt')
             file_handler.setLevel(logging.INFO)
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
@@ -257,27 +286,34 @@ def run():
 
         logger.info('Loading train/valid/test/label/graph data...')
         dataset = Dataset(args)
-        send_slack_message(config.SLACK_CONFIG, "ℹ️ Veri seti başarıyla yüklendi.")
-        
+        send_slack_message(config.SLACK_CONFIG,
+                           "ℹ️ Veri seti başarıyla yüklendi.")
+
         if args.train:
-            send_slack_message(config.SLACK_CONFIG, "➡️ Model eğitimi (`--train`) başlıyor...")
+            send_slack_message(config.SLACK_CONFIG,
+                               "➡️ Model eğitimi (`--train`) başlıyor...")
             train(args, dataset)
         if args.valid:
-            send_slack_message(config.SLACK_CONFIG, "➡️ Model doğrulaması (`--valid`) başlıyor...")
+            send_slack_message(config.SLACK_CONFIG,
+                               "➡️ Model doğrulaması (`--valid`) başlıyor...")
             valid(args, dataset)
         if args.test:
-            send_slack_message(config.SLACK_CONFIG, "➡️ Model testi (`--test`) başlıyor...")
+            send_slack_message(config.SLACK_CONFIG,
+                               "➡️ Model testi (`--test`) başlıyor...")
             test(args, dataset)
         if args.rank:
-            send_slack_message(config.SLACK_CONFIG, "➡️ Model sıralama (`--rank`) işlemi başlıyor...")
+            send_slack_message(
+                config.SLACK_CONFIG, "➡️ Model sıralama (`--rank`) işlemi başlıyor...")
             rank(args, dataset)
-            
+
         logger.info('run done.')
-        send_slack_message(config.SLACK_CONFIG, "GraphCM Modeli Süreci Başarıyla Tamamlandı!")
+        send_slack_message(config.SLACK_CONFIG,
+                           "GraphCM Modeli Süreci Başarıyla Tamamlandı!")
 
     except KeyboardInterrupt:
         print("\nSüreç kullanıcı tarafından manuel olarak durduruldu.")
-        send_slack_message(config.SLACK_CONFIG, "UYARI: Süreç kullanıcı tarafından manuel olarak durduruldu.")
+        send_slack_message(
+            config.SLACK_CONFIG, "UYARI: Süreç kullanıcı tarafından manuel olarak durduruldu.")
 
     except Exception as e:
         # Hata durumunda detaylı bir bildirim gönder
@@ -285,6 +321,7 @@ def run():
         send_slack_message(config.SLACK_CONFIG, error_message)
         # Hatayı tekrar fırlatarak programın normal şekilde (hata koduyla) sonlanmasını sağla
         raise e
+
 
 if __name__ == '__main__':
     run()
