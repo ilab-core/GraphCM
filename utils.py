@@ -1,6 +1,10 @@
 import os
 import pprint
 import copy
+import sys
+import datetime as dt
+from ilab_tools.slack import send_message
+
 
 def check_path(file_path):
     if not os.path.exists(file_path):
@@ -229,3 +233,31 @@ def xml_line_removable(xml_line):
     elif xml_line.find('<POM>') != -1 and xml_line.find('</POM>') != -1:
         return 1
     return 0
+
+
+def send_slack_message(slack_config, message):
+    """
+    Slack'e formatlı bir şekilde mesaj gönderen yardımcı fonksiyon.
+    
+    Args:
+        slack_config (dict): 'token' ve 'channel_id' içeren dictionary.
+        message (str): Gönderilecek mesaj.
+    """
+    try:
+        # Mesaja o anki tarihi ekleyelim
+        currDate = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        full_message = f"{message}\n> `Tarih: {currDate}`"
+        
+        # Kodu çalıştırırken konsolda da mesajı görelim
+        print(f"Slack'e gönderiliyor: {message}")
+        
+        # ilab_tools'daki asıl fonksiyonu çağırıyoruz
+        send_message(
+            qauth_token=slack_config['token'], 
+            channel_id=slack_config['channel_id'],
+            message=full_message
+        )
+        print("Mesaj başarıyla gönderildi.")
+
+    except Exception as e:
+        print(f"HATA: Slack mesajı gönderilemedi! -> {e}")

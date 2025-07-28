@@ -30,14 +30,20 @@ requests==2.32.4
 scipy==1.15.3
 six==1.17.0
 tensorboardX==2.6.4
-torch==1.13.0+cpu
+torch==1.13.0
 torch-geometric==2.6.1
-torch-scatter==2.1.2
-torch-sparse==0.6.18
-torchaudio==0.13.0+cpu
-torchvision==0.14.0+cpu
+# PyTorch Geometric ve bağımlılıkları (Lokal .whl dosyalarından)
+torch_scatter @ file:./wheels/torch_scatter-2.1.0+pt113cpu-cp310-cp310-win_amd64.whl
+torch_sparse @ file:./wheels/torch_sparse-0.6.17+pt113cpu-cp310-cp310-win_amd64.whl
+torch_cluster @ file:./wheels/torch_cluster-1.6.1+pt113cpu-cp310-cp310-win_amd64.whl
+torch_spline_conv @ file:./wheels/torch_spline_conv-1.2.1+pt113cpu-cp310-cp310-win_amd64.whl
+torchaudio==0.13.0
+torchvision==0.14.0
+slack_sdk==3.36.0
 tqdm==4.67.1
 typing_extensions==4.14.0
 tzdata==2025.2
 urllib3==2.5.0
 yarl==1.20.1
+python-dotenv==1.1.1
+ilab-tools @ git+https://github.com/ilab-core/ilab-tools.git

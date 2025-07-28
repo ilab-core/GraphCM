@@ -28,7 +28,7 @@ class Dataset(object):
         if os.path.exists(label_path):
             self.label_set = self.load_dataset(label_path, mode='label')
         else:
-            print(f"[INFO] human label dosyası bulunamadı: {label_path}, sadece click datasıyla devam ediliyor.")
+            print(f"human label dosyası bulunamadı: {label_path}, sadece click datasıyla devam ediliyor.")
             self.label_set = []
 
         self.trainset_size = len(self.train_set)
