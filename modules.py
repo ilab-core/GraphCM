@@ -75,10 +75,10 @@ class DGATLayer(nn.Module):
         if use_gnn:
             qid_neighbor_sampler =  NeighborSampler(self.qid_edge_index, node_idx=None, sizes=[self.args.gnn_neigh_sample],
                                                     batch_size=self.query_size, return_e_id =False,
-                                                    shuffle=True, num_workers=12)
+                                                    shuffle=True, num_workers=0) # num_workers=0 olarak değiştirildi
             uid_neighbor_sampler =  NeighborSampler(self.uid_edge_index, node_idx=None, sizes=[self.args.gnn_neigh_sample],
                                                     batch_size=self.doc_size, return_e_id =False,
-                                                    shuffle=True, num_workers=12)
+                                                    shuffle=True, num_workers=0) # num_workers=0 olarak değiştirildi
             cnt = 0
             for _, sampled_qid, sampled_index_tuple in qid_neighbor_sampler:
                 assert cnt < 1
@@ -97,12 +97,28 @@ class DGATLayer(nn.Module):
                 sampled_uid_embed = self.uid_embedding(sampled_uid)
                 processed_uid_embed = F.relu(self.uid_GAT(sampled_uid_embed, sampled_index).type(torch.float))
                 argsort_sampled_uid = torch.argsort(sampled_uid)
+            
             QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid, dtype=np.int64)) for qid in qids], batch_first=True)
             UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)
             if use_cuda:
                 QIDS, UIDS = QIDS.cuda(), UIDS.cuda()
-            qid_embedding = F.embedding(F.embedding(QIDS, argsort_sampled_qid), processed_qid_embed)
-            uid_embedding = F.embedding(F.embedding(UIDS, argsort_sampled_uid), processed_uid_embed)
+
+
+            #weight must be a 2D tensor error --> alttaki iki kod satırı silindi
+            #qid_embedding = F.embedding(F.embedding(QIDS, argsort_sampled_qid), processed_qid_embed)
+            #uid_embedding = F.embedding(F.embedding(UIDS, argsort_sampled_uid), processed_uid_embed)
+
+            # --- DÜZELTİLMİŞ KOD BLOĞU ---
+            # processed_qid_embed matrisini argsort_sampled_qid ile yeniden sırala
+            reordered_qid_embed = processed_qid_embed[argsort_sampled_qid]
+            # Şimdi QIDS'i kullanarak bu sıralanmış matristen doğru embedding'leri seç
+            qid_embedding = F.embedding(QIDS, reordered_qid_embed)
+
+            # Aynı işlemi uid için de yap
+            reordered_uid_embed = processed_uid_embed[argsort_sampled_uid]
+            uid_embedding = F.embedding(UIDS, reordered_uid_embed)
+            # --- DÜZELTME SONU ---
+
         else:
             QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid, dtype=np.int64)) for qid in qids], batch_first=True)
             UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)

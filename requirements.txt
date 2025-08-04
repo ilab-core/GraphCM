@@ -32,11 +32,10 @@ six==1.17.0
 tensorboardX==2.6.4
 torch==1.13.0
 torch-geometric==2.6.1
-# PyTorch Geometric ve bağımlılıkları (Lokal .whl dosyalarından)
-torch_scatter @ file:./wheels/torch_scatter-2.1.0+pt113cpu-cp310-cp310-win_amd64.whl
-torch_sparse @ file:./wheels/torch_sparse-0.6.17+pt113cpu-cp310-cp310-win_amd64.whl
-torch_cluster @ file:./wheels/torch_cluster-1.6.1+pt113cpu-cp310-cp310-win_amd64.whl
-torch_spline_conv @ file:./wheels/torch_spline_conv-1.2.1+pt113cpu-cp310-cp310-win_amd64.whl
+torch-scatter
+torch-sparse
+torch-cluster
+torch-spline-conv
 torchaudio==0.13.0
 torchvision==0.14.0
 slack_sdk==3.36.0

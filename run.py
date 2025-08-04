@@ -42,7 +42,7 @@ def parse_args():
                                 help='momentum')
     train_settings.add_argument('--dropout_rate', type=float, default=0.5,
                                 help='dropout rate')
-    train_settings.add_argument('--batch_size', type=int, default=64,
+    train_settings.add_argument('--batch_size', type=int, default=16, #normalde 64
                                 help='train batch size')
     train_settings.add_argument('--num_steps', type=int, default=20000,
                                 help='number of training steps')
