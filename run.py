@@ -152,7 +152,7 @@ def valid(args, dataset):
     sum_click_loss, sum_perplexity = 0.0, 0.0
     for i in range(args.num_iter):
         valid_batches = dataset.gen_mini_batches(
-            'valid', dataset.validset_size, shuffle=False)
+            'valid', args.batch_size, shuffle=False) #('valid', dataset.validset_size, shuffle=False) eski hal
         valid_click_loss, valid_rel_loss, perplexity = model.evaluate(
             valid_batches, dataset)
         sum_click_loss += valid_click_loss
@@ -187,7 +187,7 @@ def test(args, dataset):
     sum_click_loss, sum_perplexity = 0.0, 0.0
     for i in range(args.num_iter):
         test_batches = dataset.gen_mini_batches(
-            'test', dataset.testset_size, shuffle=False)
+            'test', args.batch_size, shuffle=False)# ('test', dataset.testset_size, shuffle=False) eski hal
         test_click_loss, test_rel_loss, perplexity = model.evaluate(
             test_batches, dataset)
         sum_click_loss += test_click_loss
