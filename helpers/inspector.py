@@ -1,10 +1,8 @@
 import re
 import sys
 
-# --- LÜTFEN DOSYA YOLLARINI KONTROL EDİN ---
 input_file_path = "data/MyDataset/raw_log2.txt"
 output_file_path = "data/MyDataset/train_final_and_correct.txt" # Çıktı dosyasına yeni bir isim verelim
-# -----------------------------------------
 
 print(f"Kanıta dayalı nihai çözümle işlem başlatılıyor...")
 print(f"Girdi: '{input_file_path}'")

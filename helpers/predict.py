@@ -70,7 +70,7 @@ def predict(args):
     
     # Çıktı, [batch_size, sequence_length] boyutunda bir tensördür (bizim için [1, 10]).
     # Bizim ilgilendiğimiz ilk dokümanın olasılığını alıyoruz.
-    prediction = click_probabilities[0, 0].item()
+    prediction = click_probabilities[0][0, 0].item()
 
     print("\n" + "="*40)
     print(f"SONUÇ: Modelin bu dokümana tıklanma olasılığı tahmini:")

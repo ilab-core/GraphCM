@@ -63,6 +63,8 @@ class DGATLayer(nn.Module):
         # Get click/vid/position embeddings
         CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click, dtype=np.int64))[:-1] for click in clicks], batch_first=True)
         VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid, dtype=np.int64)) for vid in vids], batch_first=True)
+        #CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click.cpu(), dtype=np.int64)) for click in clicks], batch_first=True)
+        #VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid.cpu(), dtype=np.int64)) for vid in vids], batch_first=True)
         if use_cuda:
             CLICKS, VIDS = CLICKS.cuda(), VIDS.cuda()
         batch_size = CLICKS.shape[0]
@@ -100,6 +102,8 @@ class DGATLayer(nn.Module):
             
             QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid, dtype=np.int64)) for qid in qids], batch_first=True)
             UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)
+            #QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid.cpu(), dtype=np.int64)) for qid in qids], batch_first=True)
+            #UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid.cpu(), dtype=np.int64)) for uid in uids], batch_first=True)
             if use_cuda:
                 QIDS, UIDS = QIDS.cuda(), UIDS.cuda()
 
@@ -122,6 +126,8 @@ class DGATLayer(nn.Module):
         else:
             QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid, dtype=np.int64)) for qid in qids], batch_first=True)
             UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)
+            #QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid.cpu(), dtype=np.int64)) for qid in qids], batch_first=True)
+            #UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid.cpu(), dtype=np.int64)) for uid in uids], batch_first=True)
             if use_cuda:
                 QIDS, UIDS = QIDS.cuda(), UIDS.cuda()
             qid_embedding = self.qid_embedding(QIDS)
