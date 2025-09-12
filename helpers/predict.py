@@ -5,7 +5,7 @@ Eğitilmiş GraphCM modelini kullanarak tek bir (sorgu, doküman) çifti için
 tıklama olasılığı tahmini yapan script.
 
 Örnek Komut:
-python helpers/predict.py --query_id 5 --doc_id 120
+python helpers/predict.py --query_id 1333 --doc_id 14139
 """
 
 # 1. Gerekli Kütüphaneler ve Path Düzeltmesi
@@ -14,6 +14,7 @@ import argparse
 import sys
 import os
 
+# Projenin ana dizinini path'e ekleyerek Model ve Dataset'i import etmemizi sağlar
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model import Model
@@ -49,32 +50,35 @@ def predict(args):
     
     # 3. Modelin Girdisini Hazırlama
     # ----------------------------------------------------
-    # Model, tek bir ID yerine bir "batch" veri bekler.
-    # Biz de tekil girdimizi 1'lik bir batch haline getiriyoruz.
-    # Model 10'luk doküman listelerine göre eğitildiği için, girdimizi 0'larla dolduruyoruz.
-    
     query_id = args.query_id
     doc_id = args.doc_id
     
-    # Girdileri PyTorch tensörlerine çeviriyoruz.
+    # Sorguyu, modelin aynı anda bir grup veriyi işleme formatına uygun hale getiriyoruz.
     qids = torch.LongTensor([[query_id]]).to(device)
-    uids = torch.LongTensor([[doc_id] + [0] * 9]).to(device) # İlk doküman bizimki, gerisi boş.
-    vids = torch.LongTensor([[0] * 10]).to(device) # vtype için boş veri
-    clicks = torch.LongTensor([[0] * 10]).to(device) # clicks için boş veri
+    # Model 10'luk liste beklediği için, test edeceğimiz dokümanı ilk sıraya koyup gerisini boş bırakıyoruz.
+    uids = torch.LongTensor([[doc_id] + [0] * 9]).to(device)
+    #uids = torch.LongTensor([[0] * 4 + [doc_id] + [0] * 5]).to(device)
+    # Doküman tipi (vtype) bilgimiz olmasa da, eğitimdekiyle uyumlu olması için standart '1' değeriyle dolduruyoruz.
+    vids = torch.LongTensor([[1] * 10]).to(device)
+    # Gelecekteki bir tıklamayı tahmin ettiğimiz için, "henüz tıklama olmadı" durumunu temsil eden nötr girdi gönderiyoruz.
+    clicks = torch.LongTensor([[0] * 10]).to(device)
 
     # 4. Tahmin Yapma ve Sonucu Gösterme
     # ----------------------------------------------------
     with torch.no_grad(): # Gradyan hesaplamasını kapatarak süreci hızlandırıyoruz.
         # Modeli çalıştırıp tıklama olasılıklarını alıyoruz.
-        click_probabilities = model.model(qids, uids, vids, clicks)
+        click_probabilities, exam_probs, attr_scores = model.model(qids, uids, vids, clicks)
     
-    # Çıktı, [batch_size, sequence_length] boyutunda bir tensördür (bizim için [1, 10]).
-    # Bizim ilgilendiğimiz ilk dokümanın olasılığını alıyoruz.
-    prediction = click_probabilities[0][0, 0].item()
+    # İlgilendiğimiz ilk dokümanın olasılığını alıyoruz.
+    final_prediction = click_probabilities[0, 0].item()
+    exam_prediction = exam_probs[0, 0].item()
+    attr_prediction = attr_scores[0, 0].item()
 
     print("\n" + "="*40)
-    print(f"SONUÇ: Modelin bu dokümana tıklanma olasılığı tahmini:")
-    print(f">>> {prediction:.4f} <<<")
+    print(f"SONUÇ: Modelin İç Değerleri:")
+    print(f"  - P(Inceleme / Examination): {exam_prediction:.4f}")
+    print(f"  - P(Çekicilik / Attractiveness): {attr_prediction:.4f}")
+    print(f"  - Nihai Tıklama Olasılığı (E * A): {final_prediction:.4f}")
     print("="*40)
 
 
@@ -82,62 +86,65 @@ def predict(args):
 # ----------------------------------------------------
 if __name__ == "__main__":
     
-    # argparse ile sadece değişecek olan girdileri (query_id, doc_id) alalım.
+    # 1. Komut satırından alınacak değişken argümanları tanımla
     parser = argparse.ArgumentParser(description='GraphCM ile tekil tahmin yapma scripti.')
     parser.add_argument('--query_id', type=int, required=True, help='Tahmin yapılacak sorgunun IDsi.')
     parser.add_argument('--doc_id', type=int, required=True, help='Tahmin yapılacak dokümanın IDsi.')
-    
-    # Komut satırından gelen query_id ve doc_id'yi al.
+    parser.add_argument('--load_model', type=int, default=15492, help='Yüklenecek modelin adım numarası (checkpoint). Varsayılan: Son epoch.')
     script_args = parser.parse_args()
 
-    # Modelin geri kalan tüm ayarlarını içeren bir Namespace objesi oluşturalım.
-    model_args = argparse.Namespace(
-        dataset='emj',
-        model_dir='./outputs/models/',
-        result_dir='./outputs/results/',
-        summary_dir='./outputs/summary/',
-        log_dir='./outputs/log/',
-        algo='GraphCM',
-        load_model=8120,
-        use_gnn=True,
-        combine='mul',
-        embed_size=32,
-        hidden_size=64,
-        max_d_num=10,
-        pos_embed_size=4,
-        click_embed_size=4,
-        vtype_embed_size=8,
-        gnn_neigh_sample=5,
-        gnn_att_heads=2,
-        gnn_dropout=0,
-        gnn_leaky_slope=0.2,
-        gnn_concat=False,
-        inter_neigh_sample=0,
-        inter_leaky_slope=0.2,
-        optim='adadelta',
-        learning_rate=0.01,
-        weight_decay=1e-05,
-        momentum=0.99,
-        dropout_rate=0.5,
-        gpu_num=0,
-        vtype_size=1,
-        eval_freq=99999,
-        check_point=8120,
-        patience=5,
-        lr_decay=0.5,
-        train=False,
-        valid=False,
-        test=False,
-        rank=False,
-        num_iter=1,
-        reg_relevance=1.0,
-        use_pretrain_embed=False,
-        data_parallel=False
-    )
-    
-    # Script'ten gelen argümanları model ayarlarına ekleyelim.
+    # 2. Modelin eğitildiği sabit (hardcoded) parametreleri bir sözlükte topla
+    # Bu değerler "expC_neigh15_lr_0_0005" deneyinden alınmıştır.
+    model_params = {
+        # --- Temel Ayarlar ---
+        'dataset': 'emj',
+        'model_dir': './outputs/models/expD_neigh20_lr_0_0005',      # DÜZELTİLDİ
+        'result_dir': './outputs/results/expD_neigh20_lr_0_0005',
+        'summary_dir': './outputs/summary/expD_neigh20_lr_0_0005',
+        'log_dir': './outputs/log/',
+        'algo': 'GraphCM',
+        
+        # --- Mimari ve Optimizer Ayarları ---
+        'batch_size': 512,
+        'optim': 'adam',
+        'learning_rate': 0.0005,
+        'embed_size': 32,
+        'hidden_size': 64,
+        'vtype_embed_size': 8,
+        'click_embed_size': 4,
+        'pos_embed_size': 4,
+        'combine': 'mul',
+        'use_gnn': True,
+        'gnn_att_heads': 2,
+        'weight_decay': 1e-05,
+        'momentum': 0.99,
+        'dropout_rate': 0.5,
+        'gnn_neigh_sample': 20,
+        
+        # --- Diğer Zorunlu Parametreler ---
+        'max_d_num': 10,
+        'gnn_dropout': 0,
+        'gnn_leaky_slope': 0.2,
+        'gnn_concat': False,
+        'inter_neigh_sample': 0,
+        'inter_leaky_slope': 0.2,
+        'gpu_num': 1,
+        'data_parallel': False,
+        'eval_freq': 1291,
+        'check_point': 1291,
+        'patience': 5,
+        'lr_decay': 0.5,
+        'train': False, 'valid': False, 'test': False, 'rank': False,
+        'num_iter': 1,
+        'reg_relevance': 1.0,
+        'use_pretrain_embed': False
+    }
+
+    # 3. Sabit parametreleri ve komut satırı argümanlarını birleştir
+    model_args = argparse.Namespace(**model_params)
     model_args.query_id = script_args.query_id
     model_args.doc_id = script_args.doc_id
+    model_args.load_model = script_args.load_model
 
-    # Ana tahmin fonksiyonunu çalıştır.
+    # 4. Ana tahmin fonksiyonunu çalıştır
     predict(model_args)

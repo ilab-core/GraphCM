@@ -60,28 +60,33 @@ def rerank(args):
     print("="*50)
 
 if __name__ == "__main__":
+    
+    # argparse ile sadece değişecek olan girdileri (query_id, doc_ids) alalım.
     parser = argparse.ArgumentParser(description='GraphCM ile bir doküman listesini yeniden sıralama.')
     parser.add_argument('--query_id', type=int, required=True, help='Tahmin yapılacak sorgunun IDsi.')
     parser.add_argument('--doc_ids', type=str, required=True, help='JSON formatında 10 elemanlı doküman ID listesi. Örn: "[1,2,3,4,5,6,7,8,9,10]"')
-    
+    # Opsiyonel olarak hangi checkpoint'i yükleyeceğimizi de argüman olarak alalım
+    parser.add_argument('--load_model', type=int, default=25825, help='Yüklenecek modelin adım numarası (checkpoint). Varsayılan: 5. epoch sonu.')
+
     script_args = parser.parse_args()
 
     # Modelin ihtiyaç duyduğu TÜM parametreleri içeren Namespace objesi.
-    # Değerler, son başarılı eğitime göre ayarlandı.
+    # Değerler, "emj_b128_lr0_001_full_cap" denemesine göre ayarlandı.
     model_args = argparse.Namespace(
-        dataset='25_percent',
-        model_dir='./outputs/models/emj_b256_final',
-        result_dir='./outputs/results/emj_b256_final',
-        summary_dir='./outputs/summary/emj_b256_final',
-        log_dir='./outputs/log/emj_b256_final',
+        # --- TEMEL AYARLAR (Eğitim Komutundan Alındı) ---
+        dataset='emj',
+        model_dir='./outputs/models/emj_b128_lr0_001_full_cap',
+        result_dir='./outputs/results/emj_b128_lr0_001_full_cap',
+        summary_dir='./outputs/summary/emj_b128_lr0_001_full_cap',
+        log_dir='./outputs/log/',
         algo='GraphCM',
-        load_model=7740,
+        load_model=script_args.load_model, # Argümandan gelen değeri kullan
         
-        # --- SON BAŞARILI EĞİTİMDEKİ MİMARİ VE DİĞER AYARLAR ---
-        batch_size=256,
+        # --- EĞİTİMDE KULLANILAN MİMARİ VE OPTIMIZER AYARLARI ---
+        batch_size=128,
         optim='adam',
         learning_rate=0.001,
-        embed_size=32,
+        embed_size=64,
         hidden_size=64,
         vtype_embed_size=8,
         click_embed_size=4,
@@ -93,6 +98,8 @@ if __name__ == "__main__":
         momentum=0.99,
         dropout_rate=0.5,
         gnn_neigh_sample=5,
+        
+        # --- Hata almamak için eklenen diğer zorunlu parametreler ---
         max_d_num=10,
         gnn_dropout=0,
         gnn_leaky_slope=0.2,
@@ -101,8 +108,8 @@ if __name__ == "__main__":
         inter_leaky_slope=0.2,
         gpu_num=1,
         data_parallel=False,
-        eval_freq=999999,
-        check_point=645,
+        eval_freq=5165,
+        check_point=5165,
         patience=5,
         lr_decay=0.5,
         train=False,

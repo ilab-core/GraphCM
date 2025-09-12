@@ -1,87 +1,125 @@
+# -*- coding: utf-8 -*-
+
 import pandas as pd
 import json
-import os 
-from collections import defaultdict
+import os
+import sys
 
 def analyze_interactions(data_file_path):
     """
-    Veri setindeki (sorgu, doküman) çiftlerinin gösterim ve tıklanma sayılarını analiz eder.
+    Veri setindeki (sorgu, doküman) çiftlerinin gösterim, tıklanma sayılarını 
+    ve pozisyonlarını analiz eder.
     """
     interactions = []
     
-    print(f"{data_file_path} dosyası okunuyor ve analiz ediliyor...")
+    print(f"\n{data_file_path} dosyası okunuyor ve analiz ediliyor...")
 
-    # Dosyanın var olup olmadığını kontrol edelim
     if not os.path.exists(data_file_path):
         print(f"HATA: Dosya bulunamadı: {data_file_path}")
-        print("Lütfen script'i projenin ana dizininden (GraphCM/) çalıştırdığınızdan emin olun.")
-        return None
+        return None, None
 
     with open(data_file_path, 'r') as f:
         for line in f:
-            parts = line.strip().split('\t')
-            query_id = int(parts[1])
-            doc_ids = json.loads(parts[2])
-            clicks = json.loads(parts[4])
-            
-            for doc_id, click in zip(doc_ids, clicks):
-                interactions.append({
-                    'query_id': query_id,
-                    'doc_id': doc_id,
-                    'click': click
-                })
+            try:
+                parts = line.strip().split('\t')
+                if len(parts) != 5: continue # Satırın 5 sütunlu olduğundan emin ol
+                
+                query_id = int(parts[1])
+                doc_ids = json.loads(parts[2])
+                clicks = json.loads(parts[4])
+                
+                for i, (doc_id, click) in enumerate(zip(doc_ids, clicks)):
+                    interactions.append({
+                        'query_id': query_id,
+                        'doc_id': doc_id,
+                        'click': click,
+                        'position': i + 1
+                    })
+            except (json.JSONDecodeError, IndexError, ValueError) as e:
+                print(f"UYARI: Hatalı formatlı satır atlandı: {line.strip()} - Hata: {e}")
+                continue
+
 
     if not interactions:
         print("Hiç etkileşim bulunamadı.")
-        return None
+        return None, None
 
     # Etkileşimleri bir pandas DataFrame'e dönüştürelim
-    df = pd.DataFrame(interactions)
+    full_df = pd.DataFrame(interactions)
     
-    # Her bir (sorgu, doküman) çifti için istatistikleri hesaplayalım
-    stats = df.groupby(['query_id', 'doc_id']).agg(
-        impression_count=('click', 'count'),  # Kaç kez gösterildiği
-        click_count=('click', 'sum')          # Kaç kez tıklandığı
+    # Her bir (sorgu, doküman) çifti için genel istatistikleri hesaplayalım
+    stats_df = full_df.groupby(['query_id', 'doc_id']).agg(
+        impression_count=('click', 'count'),
+        click_count=('click', 'sum')
     ).reset_index()
     
-    # Tıklama Oranını (CTR) hesaplayalım
-    stats['ctr'] = (stats['click_count'] / stats['impression_count']).round(3)
+    stats_df['ctr'] = (stats_df['click_count'] / stats_df['impression_count']).round(3)
     
-    print("\nAnaliz Tamamlandı. İşte en sık gösterilen (sorgu, doküman) çiftleri:")
+    print("Analiz Tamamlandı.")
     
-    # En çok gösterilenlere göre sıralayalım
-    top_impressions = stats.sort_values(by='impression_count', ascending=False)
-    
-    print(top_impressions.head(50)) # En popüler ilk 50'yi göster
-    
-    return top_impressions
-
+    # İki DataFrame'i de döndür: genel istatistikler ve tüm etkileşimler
+    return stats_df, full_df
 
 if __name__ == "__main__":
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-    train_file = os.path.join(PROJECT_ROOT, 'data', 'emj', 'train_per_query_quid.txt')
     
-    # Ana analiz fonksiyonunu çalıştırıp tüm istatistikleri alalım
-    analysis_results = analyze_interactions(train_file)
+    # Script'in argüman almasını sağla (train, valid veya test)
+    if len(sys.argv) < 2 or sys.argv[1] not in ['train', 'valid', 'test']:
+        print("HATA: Lütfen analiz edilecek seti belirtin.")
+        print("Örnek Kullanım: python helpers/analyze_data.py train")
+        sys.exit(1)
+        
+    set_to_analyze = sys.argv[1]
+
+    # Dosya yolunu dinamik olarak oluştur
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_file = os.path.join(PROJECT_ROOT, 'data', 'emj', f'{set_to_analyze}_per_query_quid.txt')
+    
+    # Ana analiz fonksiyonunu çalıştır
+    analysis_results, all_interactions_df = analyze_interactions(data_file)
 
     if analysis_results is not None:
-        # --- YENİ EKLENEN BÖLÜM ---
-        print("\n" + "="*40)
-        print("SENARYO C: Orta Popülerlikteki Değerli Örnekler Analizi")
-        print("(Gösterim sayısı 50 ile 100 arasında olanlar, CTR'a göre sıralı)")
-        print("="*40)
+        # --- BÖLÜM 1: En Popüler Çiftler ---
+        print("\n" + "="*50)
+        print("BÖLÜM 1: En Popüler (En Sık Gösterilen) 50 Çift")
+        print("="*50)
+        top_impressions = analysis_results.sort_values(by='impression_count', ascending=False)
+        print(top_impressions.head(50).to_string())
 
-        # Gösterim sayısı 50 ile 100 arasında olanları filtrele
+        # --- BÖLÜM 2: Orta Popülerlikteki Değerli Örnekler ---
+        print("\n" + "="*50)
+        print("BÖLÜM 2: Orta Popülerlikteki Değerli Örnekler (50-100 Gösterim)")
+        print("="*50)
         mid_popularity_pairs = analysis_results[
             (analysis_results['impression_count'] >= 50) & 
             (analysis_results['impression_count'] <= 100)
         ]
-        
-        # Bu nadir çiftleri CTR'a göre sırala
         valuable_mid_pairs = mid_popularity_pairs.sort_values(by='ctr', ascending=False)
         
         if valuable_mid_pairs.empty:
-            print("Bu kriterlere uyan 'Orta Popülerlikte Değerli' örnek bulunamadı.")
+            print("Bu kriterlere uyan örnek bulunamadı.")
         else:
             print(valuable_mid_pairs.head(20).to_string())
+        
+        # --- BÖLÜM 3: Genel ve Pozisyon 1 İstatistikleri ---
+        print("\n" + "="*50)
+        print("BÖLÜM 3: Genel ve Pozisyon 1 Ortalama CTR'ları")
+        print("="*50)
+        
+        total_impressions = all_interactions_df.shape[0]
+        total_clicks = all_interactions_df['click'].sum()
+        overall_ctr = total_clicks / total_impressions if total_impressions > 0 else 0
+        
+        print(f"Genel İstatistikler:")
+        print(f"  - Toplam Gösterim: {total_impressions:,}")
+        print(f"  - Toplam Tıklanma: {total_clicks:,}")
+        print(f"  - Genel Ortalama CTR: {overall_ctr:.4f}")
+        
+        pos1_df = all_interactions_df[all_interactions_df['position'] == 1]
+        if not pos1_df.empty:
+            pos1_clicks = pos1_df['click'].sum()
+            pos1_impressions = len(pos1_df)
+            pos1_ctr = pos1_clicks / pos1_impressions
+            print(f"\nPozisyon 1 İstatistikleri:")
+            print(f"  - Pozisyon 1 Gösterimleri: {pos1_impressions:,}")
+            print(f"  - Pozisyon 1 Tıklamaları: {pos1_clicks:,}")
+            print(f"  - Pozisyon 1 Ortalama CTR: {pos1_ctr:.4f}")
