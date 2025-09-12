@@ -261,3 +261,9 @@ def send_slack_message(slack_config, message):
 
     except Exception as e:
         print(f"HATA: Slack mesajı gönderilemedi! -> {e}")
+
+#dataset.py dosyası için fonksiyon
+def count_lines(path):
+    """Bir dosyadaki satır sayısını verimli bir şekilde sayar."""
+    with open(path, 'r') as f:
+        return sum(1 for line in f)
