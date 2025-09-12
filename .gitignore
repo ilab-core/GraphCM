@@ -16,3 +16,4 @@ data/
 *.log
 log_files/
 raw_data/
+*.csv
