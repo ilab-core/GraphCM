@@ -46,6 +46,15 @@ class Model(object):
         # NDCG Truncation Levels
         self.trunc_levels = [1, 3, 5, 10]
 
+        # --- YENİ EKLENEN BÖLÜM: CSV Logger Başlatma ---
+        # Sonuçların kaydedileceği klasörde bir log dosyası yolu oluşturuyoruz.
+        self.log_csv_path = os.path.join(self.args.result_dir, 'training_metrics.csv')
+        # Eğer eğitim modundaysak ve dosya daha önce oluşturulmadıysa, başlık satırını yaz.
+        if args.train and not os.path.exists(self.log_csv_path):
+            with open(self.log_csv_path, 'w') as f:
+                f.write('step,train_loss,valid_loss,valid_ppl,test_loss,test_ppl,ndcg@1,ndcg@3,ndcg@5,ndcg@10\n')
+        # --- YENİ BÖLÜM SONU ---
+
     def compute_click_loss(self, pred_logits, TRUE_CLICKS, MASK):
         """
         The click loss function
@@ -117,16 +126,22 @@ class Model(object):
             loss = self.compute_click_loss(pred_logits, TRUE_CLICKS, MASK)
             loss.backward()
             self.optimizer.step()
-            self.writer.add_scalar('train/loss', loss, self.global_step)
+            #self.writer.add_scalar('train/loss', loss, self.global_step) memory leak issue sebebiyle kaldırıldı
+            self.writer.add_scalar('train/loss', loss.item(), self.global_step)
 
             if evaluate and self.global_step % self.eval_freq == 0:
-                valid_batches = dataset.gen_mini_batches('valid', dataset.validset_size, shuffle=False)
+                #valid_batches = dataset.gen_mini_batches('valid', dataset.validset_size, shuffle=False)
+                valid_batches = dataset.gen_mini_batches('valid', self.args.batch_size, shuffle=False)
                 valid_click_loss, valid_rel_loss, valid_perplexity = self.evaluate(valid_batches, dataset)
                 torch.cuda.empty_cache()
-                self.writer.add_scalar("valid/click_loss", valid_click_loss, self.global_step)
-                self.writer.add_scalar("valid/perplexity", valid_perplexity, self.global_step)
+                #self.writer.add_scalar("valid/click_loss", valid_click_loss, self.global_step)
+                #self.writer.add_scalar("valid/perplexity", valid_perplexity, self.global_step)
+                self.writer.add_scalar("valid/click_loss", valid_click_loss.item(), self.global_step)
+                self.writer.add_scalar("valid/perplexity", valid_perplexity.item(), self.global_step)
 
-                test_batches = dataset.gen_mini_batches('test', dataset.testset_size, shuffle=False)
+
+                #test_batches = dataset.gen_mini_batches('test', dataset.testset_size, shuffle=False)
+                test_batches = dataset.gen_mini_batches('test', self.args.batch_size, shuffle=False)
                 test_click_loss, test_rel_loss, test_perplexity = self.evaluate(test_batches, dataset)
                 torch.cuda.empty_cache()
                 self.writer.add_scalar("test/click_loss", test_click_loss, self.global_step)
@@ -146,7 +161,28 @@ class Model(object):
 
                 torch.cuda.empty_cache() 
 
-                #torch.cuda.empty_cache()
+                # --- YENİ EKLENEN BÖLÜM: Metrikleri CSV'ye Yazma ---
+                # Loglanacak tüm metrikleri bir sözlükte toplayalım.
+                log_metrics = {
+                    'step': self.global_step,
+                    'train_loss': loss.item(),
+                    'valid_loss': valid_click_loss.item(),
+                    'valid_ppl': valid_perplexity.item(),
+                    'test_loss': test_click_loss.item(),
+                    'test_ppl': test_perplexity.item(),
+                    'ndcg@1': ndcgs.get(1, 'N/A') if 'ndcgs' in locals() else 'N/A',
+                    'ndcg@3': ndcgs.get(3, 'N/A') if 'ndcgs' in locals() else 'N/A',
+                    'ndcg@5': ndcgs.get(5, 'N/A') if 'ndcgs' in locals() else 'N/A',
+                    'ndcg@10': ndcgs.get(10, 'N/A') if 'ndcgs' in locals() else 'N/A'
+                }
+                # Metrikleri dosyaya ekleme modunda ('a') yazalım.
+                with open(self.log_csv_path, 'a') as f:
+                    f.write(f"{log_metrics['step']},{log_metrics['train_loss']:.6f},{log_metrics['valid_loss']:.6f},"
+                            f"{log_metrics['valid_ppl']:.4f},{log_metrics['test_loss']:.6f},{log_metrics['test_ppl']:.4f},"
+                            f"{log_metrics['ndcg@1']},{log_metrics['ndcg@3']},{log_metrics['ndcg@5']},{log_metrics['ndcg@10']}\n")
+                self.logger.info(f"Metrikler {self.log_csv_path} dosyasına kaydedildi.")
+                # --- YENİ BÖLÜM SONU ---
+
                 #for trunc_level in self.trunc_levels:
                 #   self.writer.add_scalar("rank/{}".format(trunc_level), ndcgs[trunc_level], self.global_step)
 

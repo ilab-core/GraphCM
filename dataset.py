@@ -1,17 +1,142 @@
-import glob
+#import glob
 import os
 import json
 import logging
-import math
-import numpy as np
-import torch
-import pprint
+#import math
+#import numpy as np
+#import torch
+#import pprint
 import utils
+import random
 
 class Dataset(object):
     """
-    This module implements the APIs for loading dataset and providing batch data
+    Bu modül, veri setini verimli bir şekilde yönetir. Veriyi belleğe yüklemeden,
+    ihtiyaç duyulduğunda dosyadan okuyarak batch'ler oluşturur.
     """
+    def __init__(self, args):
+        self.logger = logging.getLogger("GraphCM")
+        self.max_d_num = args.max_d_num
+        self.gpu_num = args.gpu_num
+        self.dataset = args.dataset
+        self.data_dir = os.path.join('data', self.dataset)
+        self.args = args
+        
+        # --- DEĞİŞİKLİK 1: Dosyaları belleğe yüklemek yerine sadece yollarını saklıyoruz ---
+        self.train_path = os.path.join(self.data_dir, 'train_per_query_quid.txt')
+        self.valid_path = os.path.join(self.data_dir, 'valid_per_query_quid.txt')
+        self.test_path = os.path.join(self.data_dir, 'test_per_query_quid.txt')
+        
+        label_path = os.path.join(self.data_dir, 'human_label_for_GraphCM_per_query_quid.txt')
+        self.label_path = label_path if os.path.exists(label_path) else None
+
+        # Veri seti boyutlarını (session sayısı) önceden hesaplıyoruz.
+        # NOT: Bu, her satırın bir session olduğu varsayımına dayanır. 
+        # Eğer orijinal kodunuz gibi birden çok satır bir session oluşturuyorsa,
+        # bu sayım yine de batch'leme için bir gösterge olacaktır.
+        self.trainset_size = utils.count_lines(self.train_path) if os.path.exists(self.train_path) else 0
+        self.validset_size = utils.count_lines(self.valid_path) if os.path.exists(self.valid_path) else 0
+        self.testset_size = utils.count_lines(self.test_path) if os.path.exists(self.test_path) else 0
+        self.labelset_size = utils.count_lines(self.label_path) if self.label_path else 0
+        
+        self.query_qid = utils.load_dict(self.data_dir, 'query_qid.dict')
+        self.url_uid = utils.load_dict(self.data_dir, 'url_uid.dict')
+        self.vtype_vid = utils.load_dict(self.data_dir, 'vtype_vid.dict')
+        self.query_size = len(self.query_qid)
+        self.doc_size = len(self.url_uid)
+        self.vtype_size = len(self.vtype_vid)
+
+        self.logger.info('Train set size: {} sessions.'.format(self.trainset_size))
+        self.logger.info('Dev set size: {} sessions.'.format(self.validset_size))
+        self.logger.info('Test set size: {} sessions.'.format(self.testset_size))
+        self.logger.info('Label set size: {} sessions.'.format(self.labelset_size))
+
+    def _parse_line_to_session(self, line, mode):
+        """Tek bir satırı ayrıştırıp bir session dictionary'sine dönüştürür."""
+        attr = line.strip().split('\t')
+        qids = [int(attr[1].strip())]
+        uids = json.loads(attr[2].strip())
+        vids = json.loads(attr[3].strip())
+        clicks = [0] + json.loads(attr[4].strip())
+        relevances = json.loads(attr[5].strip()) if mode == 'label' and len(attr) > 5 else [0] * self.max_d_num
+        
+        last_rank = 0
+        for idx, click in enumerate(clicks[1:]):
+            last_rank = idx + 1 if click else last_rank
+
+        return {
+            'sid': int(attr[0].strip()),
+            'qids': qids,
+            'uids': uids,
+            'vids': vids,
+            'clicks': clicks,
+            'last_rank': last_rank,
+            'relevances': relevances,
+            'relevance_start': 0
+        }
+
+    def _one_mini_batch(self, data):
+        """
+        Bir grup session verisinden modelin beklediği formatta mini-batch oluşturur.
+        Bu fonksiyonun mantığı HİÇ DEĞİŞMEDİ.
+        """
+        batch_data = {'raw_data': data, 'qids': [], 'uids': [], 'vids': [], 'clicks': [],
+                      'last_ranks': [], 'relevances': [], 'true_clicks': [],
+                      'relevance_starts': []}
+        for sample in data:
+            batch_data['qids'].append(sample['qids'])
+            batch_data['uids'].append(sample['uids'])
+            batch_data['vids'].append(sample['vids'])
+            batch_data['clicks'].append(sample['clicks'])
+            batch_data['last_ranks'].append(sample['last_rank'])
+            batch_data['relevances'].append(sample['relevances'])
+            batch_data['true_clicks'].append(sample['clicks'][1:])
+            batch_data['relevance_starts'].append(sample['relevance_start'])
+        return batch_data
+
+    # --- DEĞİŞİKLİK 2: gen_mini_batches fonksiyonunu dosyayı satır satır okuyacak şekilde yeniden yazıyoruz ---
+    def gen_mini_batches(self, set_name, batch_size, shuffle=True):
+        """
+        Veri setini belleğe yüklemeden, dosyadan satır satır okuyarak
+        mini-batch'ler üreten (yield eden) verimli versiyon.
+        """
+        if set_name == 'train':
+            path = self.train_path
+        elif set_name == 'valid':
+            path = self.valid_path
+        elif set_name == 'test':
+            path = self.test_path
+        elif set_name == 'label':
+            path = self.label_path
+        else:
+            raise NotImplementedError('Set name {} is not supported'.format(set_name))
+
+        if not path or not os.path.exists(path):
+            self.logger.warning(f"{set_name} veri seti dosyası bulunamadı: {path}")
+            return # Boş bir generator döndürür
+
+        # Verimli batch'leme için dosyayı satır satır okuyoruz
+        with open(path, 'r') as f:
+            batch_sessions = []
+            for line in f:
+                session_data = self._parse_line_to_session(line, mode=set_name)
+                batch_sessions.append(session_data)
+                if len(batch_sessions) == batch_size:
+                    if shuffle: random.shuffle(batch_sessions)
+                    yield self._one_mini_batch(batch_sessions)
+                    batch_sessions = []
+
+            # Dosyanın sonundaki artık batch'i de gönderiyoruz
+            if len(batch_sessions) > 0:
+                if shuffle: random.shuffle(batch_sessions)
+                yield self._one_mini_batch(batch_sessions)
+
+
+"""
+class Dataset(object):
+    
+    #This module implements the APIs for loading dataset and providing batch data
+    
     def __init__(self, args):
         self.logger = logging.getLogger("GraphCM")
         self.max_d_num = args.max_d_num
@@ -52,9 +177,8 @@ class Dataset(object):
         self.logger.info('Unique vtype num, including zero vector: {}'.format(self.vtype_size))
 
     def load_dataset(self, data_path, mode):
-        """
-        Loads the dataset
-        """
+        #Loads the dataset
+    
         data_set = []
         lines = open(data_path).readlines()
         previous_sid = -1
@@ -119,9 +243,9 @@ class Dataset(object):
         return data_set
 
     def _one_mini_batch(self, data, indices):
-        """
-        Get one mini batch data
-        """
+        
+        #Get one mini batch data
+
         batch_data = {'raw_data': [data[i] for i in indices],
                         'qids': [],
                         'uids': [],
@@ -143,9 +267,9 @@ class Dataset(object):
         return batch_data
 
     def gen_mini_batches(self, set_name, batch_size, shuffle=True):
-        """
-        Generate data batches for a specific dataset (train/valid/test/label)
-        """
+    
+        #Generate data batches for a specific dataset (train/valid/test/label)
+    
         if set_name == 'train':
             data = self.train_set
         elif set_name == 'valid':
@@ -168,3 +292,4 @@ class Dataset(object):
         for batch_start in np.arange(0, len(list(indices)), batch_size):
             batch_indices = indices[batch_start: batch_start + batch_size]
             yield self._one_mini_batch(data, batch_indices)
+"""

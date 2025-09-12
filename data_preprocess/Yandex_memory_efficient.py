@@ -130,7 +130,7 @@ def process_data_in_stream(args):
                             final_url_uid[uid_orig] = len(final_url_uid)
                         uids_final.append(final_url_uid[uid_orig])
                     
-                    f.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_final, str(uids_final), str([0] * 10), str(clicks)))
+                    f.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_final, str(uids_final), str([1] * 10), str(clicks)))
 
     print(' - Final sözlükler kaydediliyor...')
     save_dict(args.output, 'query_qid.dict', final_query_qid)
