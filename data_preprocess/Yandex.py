@@ -162,8 +162,7 @@ def generate_train_valid_test(args):
                         url_uid[uid] = len(url_uid)
                 qid_print = query_qid[qid]
                 uids_print = [url_uid[uid] for uid in uids]
-                #file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_print, str(uids_print), str([1] * 10), str(clicks)))
-                file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_print, str(uids_print), str([0] * 10), str(clicks)))
+                file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_print, str(uids_print), str([1] * 10), str(clicks)))
 
     print('  - {}'.format('Save rebuilt query_qid/url_uid back to files...'))
     save_dict(args.output, 'query_qid.dict', query_qid)
