@@ -46,14 +46,12 @@ class Model(object):
         # NDCG Truncation Levels
         self.trunc_levels = [1, 3, 5, 10]
 
-        # --- YENİ EKLENEN BÖLÜM: CSV Logger Başlatma ---
         # Sonuçların kaydedileceği klasörde bir log dosyası yolu oluşturuyoruz.
         self.log_csv_path = os.path.join(self.args.result_dir, 'training_metrics.csv')
         # Eğer eğitim modundaysak ve dosya daha önce oluşturulmadıysa, başlık satırını yaz.
         if args.train and not os.path.exists(self.log_csv_path):
             with open(self.log_csv_path, 'w') as f:
-                f.write('step,train_loss,valid_loss,valid_ppl,test_loss,test_ppl,ndcg@1,ndcg@3,ndcg@5,ndcg@10\n')
-        # --- YENİ BÖLÜM SONU ---
+                f.write('step,train_loss,valid_loss,valid_ppl,test_loss,test_ppl\n')
 
     def compute_click_loss(self, pred_logits, TRUE_CLICKS, MASK):
         """
@@ -64,19 +62,32 @@ class Model(object):
         loss = torch.mean(losses)
         return loss
 
+    
     def compute_perplexity(self, pred_logits, TRUE_CLICKS, MASK):
         '''
-        Compute the perplexity
+        Orijinal mantığa sadık kalarak, yeni veri formatı 
+        (batch_size, max_d_num) için PPL hesaplar.
         '''
-        session_num = pred_logits.shape[1] // 10
+        # 1. Orijinaldeki gibi her bir ilan için log-olasılıkları hesapla
         pos_logits = torch.log2(pred_logits + MINF)
         neg_logits = torch.log2(1. - pred_logits + MINF)
-        perplexity_at_rank = torch.where(TRUE_CLICKS == 1, pos_logits, neg_logits)
-        perplexity_at_rank = torch.where(MASK == True, perplexity_at_rank, torch.zeros(perplexity_at_rank.shape, device=device))
-        for session_idx in range(1, session_num):
-            perplexity_at_rank[:, :10] += perplexity_at_rank[:, 10 * session_idx:10 * session_idx + 10]
-        perplexity_at_rank = perplexity_at_rank[:, :10].sum(dim=0)
-        return perplexity_at_rank
+        log_likelihoods = torch.where(TRUE_CLICKS == 1, pos_logits, neg_logits)
+        
+        # 2. Orijinaldeki gibi maskeyi uygulayarak padding'li kısımları sıfırla
+        masked_log_likelihoods = torch.where(
+            MASK, 
+            log_likelihoods, 
+            torch.zeros_like(log_likelihoods, device=device)
+        )
+        
+        # 3. Orijinaldeki gibi rank'lara göre toplamı al.
+        #    Bizim veri yapımızda birleştirilecek session'lar olmadığı için for döngüsüne gerek yoktur.
+        #    .sum(dim=0) işlemi, batch'teki tüm sorguların sonuçlarını rank'a göre toplar.
+        #    Bu, orijinal koddaki for döngüsünün yaptığı işin modern ve doğru halidir.
+        perplexity_at_rank = masked_log_likelihoods.sum(dim=0)
+        
+        return perplexity_at_rank   
+
 
     def create_train_op(self):
         """
@@ -112,11 +123,14 @@ class Model(object):
             self.global_step += 1
             step_pbar.update(1)
 
-            # Create TRUE_CLICKS & MASK tensor
-            TRUE_CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(true_click, dtype=np.float32)) for true_click in batch['true_clicks']], batch_first=True)
-            MASK = rnn_utils.pad_sequence([torch.ones(len(true_click)) for true_click in batch['true_clicks']], batch_first=True)
-            MASK = (MASK == 1)
-            query_num = MASK.sum() // 10
+            # TRUE_CLICKS'i ve dataset'ten gelen MASK'ı doğrudan tensöre dönüştür
+            TRUE_CLICKS = torch.tensor(np.array(batch['true_clicks']), dtype=torch.float32)
+            MASK = torch.tensor(np.array(batch['masks']), dtype=torch.bool)
+
+            # query_num'ı, mask'taki gerçek verileri sayarak buluyoruz.
+            # .sum() burada toplam True sayısını verir.
+            query_num = MASK.sum()
+
             if use_cuda:
                 TRUE_CLICKS, MASK = TRUE_CLICKS.cuda(), MASK.cuda()
 
@@ -132,7 +146,7 @@ class Model(object):
             if evaluate and self.global_step % self.eval_freq == 0:
                 #valid_batches = dataset.gen_mini_batches('valid', dataset.validset_size, shuffle=False)
                 valid_batches = dataset.gen_mini_batches('valid', self.args.batch_size, shuffle=False)
-                valid_click_loss, valid_rel_loss, valid_perplexity = self.evaluate(valid_batches, dataset)
+                valid_click_loss, valid_perplexity = self.evaluate(valid_batches, dataset)
                 torch.cuda.empty_cache()
                 #self.writer.add_scalar("valid/click_loss", valid_click_loss, self.global_step)
                 #self.writer.add_scalar("valid/perplexity", valid_perplexity, self.global_step)
@@ -142,7 +156,7 @@ class Model(object):
 
                 #test_batches = dataset.gen_mini_batches('test', dataset.testset_size, shuffle=False)
                 test_batches = dataset.gen_mini_batches('test', self.args.batch_size, shuffle=False)
-                test_click_loss, test_rel_loss, test_perplexity = self.evaluate(test_batches, dataset)
+                test_click_loss, test_perplexity = self.evaluate(test_batches, dataset) 
                 torch.cuda.empty_cache()
                 self.writer.add_scalar("test/click_loss", test_click_loss, self.global_step)
                 self.writer.add_scalar("test/perplexity", test_perplexity, self.global_step)
@@ -169,17 +183,13 @@ class Model(object):
                     'valid_loss': valid_click_loss.item(),
                     'valid_ppl': valid_perplexity.item(),
                     'test_loss': test_click_loss.item(),
-                    'test_ppl': test_perplexity.item(),
-                    'ndcg@1': ndcgs.get(1, 'N/A') if 'ndcgs' in locals() else 'N/A',
-                    'ndcg@3': ndcgs.get(3, 'N/A') if 'ndcgs' in locals() else 'N/A',
-                    'ndcg@5': ndcgs.get(5, 'N/A') if 'ndcgs' in locals() else 'N/A',
-                    'ndcg@10': ndcgs.get(10, 'N/A') if 'ndcgs' in locals() else 'N/A'
-                }
-                # Metrikleri dosyaya ekleme modunda ('a') yazalım.
+                    'test_ppl': test_perplexity.item()
+            }
+          # Metrikleri dosyaya ekleme modunda yazalım.
                 with open(self.log_csv_path, 'a') as f:
+                    # Sadece var olan metrikleri yazdırıyoruz.
                     f.write(f"{log_metrics['step']},{log_metrics['train_loss']:.6f},{log_metrics['valid_loss']:.6f},"
-                            f"{log_metrics['valid_ppl']:.4f},{log_metrics['test_loss']:.6f},{log_metrics['test_ppl']:.4f},"
-                            f"{log_metrics['ndcg@1']},{log_metrics['ndcg@3']},{log_metrics['ndcg@5']},{log_metrics['ndcg@10']}\n")
+                            f"{log_metrics['valid_ppl']:.4f},{log_metrics['test_loss']:.6f},{log_metrics['test_ppl']:.4f}\n")
                 self.logger.info(f"Metrikler {self.log_csv_path} dosyasına kaydedildi.")
                 # --- YENİ BÖLÜM SONU ---
 
@@ -217,15 +227,22 @@ class Model(object):
             exit_tag, metric_save, patience = self._train_epoch(train_batches, dataset, metric_save, patience, step_pbar)
 
     def evaluate(self, eval_batches, dataset):
-        total_click_loss, total_rel_loss, total_num = 0., 0., 0
-        perplexity_at_rank = torch.zeros(10, device=device, dtype=torch.float) # 10 docs per query
+        # ADIM 1: total_rel_loss buradan kaldırıldı.
+        total_click_loss, total_num = 0., 0
+        
+        # '10' yerine self.max_d_num kullanıldı.
+        perplexity_at_rank = torch.zeros(self.max_d_num, device=device, dtype=torch.float) 
+        
         with torch.no_grad():
             for b_idx, batch in enumerate(eval_batches):
-                # Create TRUE_CLICKS & MASK tensor
-                TRUE_CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(true_click, dtype=np.float32)) for true_click in batch['true_clicks']], batch_first=True)
-                MASK = rnn_utils.pad_sequence([torch.ones(len(true_click)) for true_click in batch['true_clicks']], batch_first=True)
-                MASK = (MASK == 1)
-                query_num = MASK.sum() // 10
+                # TRUE_CLICKS'i ve dataset'ten gelen MASK'ı doğrudan tensöre dönüştür
+                TRUE_CLICKS = torch.tensor(np.array(batch['true_clicks']), dtype=torch.float32)
+                MASK = torch.tensor(np.array(batch['masks']), dtype=torch.bool)
+
+                # query_num, bu evaluate döngüsünde toplam tıklanabilir ilan sayısını temsil etmeli
+                # MASK.sum() bunu doğrudan ve en doğru şekilde verir.
+                query_num = MASK.sum()
+
                 if use_cuda:
                     TRUE_CLICKS, MASK = TRUE_CLICKS.cuda(), MASK.cuda()
 
@@ -237,10 +254,15 @@ class Model(object):
                 total_click_loss += click_loss * query_num
                 total_num += query_num
         
+        if total_num > 0:
             click_loss = 1.0 * total_click_loss / total_num
-            rel_loss = 1.0 * total_rel_loss / total_num
-            perplexity = (2 ** (- perplexity_at_rank / total_num)).sum() / 10
-        return click_loss, rel_loss, perplexity
+            perplexity = (2 ** (- perplexity_at_rank / total_num)).sum() / self.max_d_num
+        else:
+            # Eğer hiç veri işlenmediyse (boş set), varsayılan değerleri döndür
+            click_loss = torch.tensor(0.0)
+            perplexity = torch.tensor(1e10) # Perplexity için çok yüksek bir değer
+
+        return click_loss, perplexity
     
     def ranking(self, label_batches, dataset):
         ndcgs, cnt_useless_session, cnt_usefull_session = {}, {}, {}
@@ -253,9 +275,9 @@ class Model(object):
                 self.model.eval()
                 true_relevances_batches = batch['relevances']
                 pred_logits, pred_rels = self.model(batch['qids'], batch['uids'], batch['vids'], batch['clicks'])
-                relevances_batches = torch.zeros(pred_logits.shape[0], 10)
+                relevances_batches = torch.zeros(pred_logits.shape[0], self.max_d_num)
                 for r_idx, relevance_start in enumerate(batch['relevance_starts']): 
-                    relevances_batches[r_idx] = pred_logits[r_idx, relevance_start : relevance_start + 10]
+                    relevances_batches[r_idx] = pred_logits[r_idx, relevance_start : relevance_start + self.max_d_num]
                 relevances_batches = relevances_batches.data.cpu().numpy().tolist()
                 
                 for relevances, true_relevances in zip(relevances_batches, true_relevances_batches):

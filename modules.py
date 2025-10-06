@@ -40,7 +40,7 @@ class DGATLayer(nn.Module):
             self.uid_embedding = nn.Embedding(doc_size, self.args.embed_size)
         self.click_embedding = nn.Embedding(2, self.args.click_embed_size)
         self.vid_embedding = nn.Embedding(vtype_size, self.args.vtype_embed_size)
-        self.pos_embedding = nn.Embedding(10, self.args.pos_embed_size)
+        self.pos_embedding = nn.Embedding(self.args.max_d_num, self.args.pos_embed_size)
 
         if args.use_gnn:
             self.qid_edge_index = torch.load(os.path.join(self.data_dir, 'dgat_qid_edge_index.pth'))
@@ -61,7 +61,7 @@ class DGATLayer(nn.Module):
     def forward(self, qids, uids, vids, clicks, use_gnn=True):
 
         # Get click/vid/position embeddings
-        CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click, dtype=np.int64))[:-1] for click in clicks], batch_first=True)
+        CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click, dtype=np.int64)) for click in clicks], batch_first=True)
         VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid, dtype=np.int64)) for vid in vids], batch_first=True)
         #CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click.cpu(), dtype=np.int64)) for click in clicks], batch_first=True)
         #VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid.cpu(), dtype=np.int64)) for vid in vids], batch_first=True)
@@ -71,7 +71,7 @@ class DGATLayer(nn.Module):
         seq_len = CLICKS.shape[1]
         click_embedding = self.click_embedding(CLICKS)  # [batch_size, seq_len, click_embed_size]
         vid_embedding = self.vid_embedding(VIDS)  # [batch_size, seq_len, vtype_embed_size]
-        pos_embedding = self.pos_embedding.weight.unsqueeze(dim=0).repeat(batch_size, seq_len // 10, 1)  # [batch_size, seq_len, embed_size]
+        pos_embedding = self.pos_embedding.weight.unsqueeze(dim=0).repeat(batch_size, seq_len // self.args.max_d_num, 1)  # [batch_size, seq_len, embed_size]
 
         # Get qid/uid embeddings
         if use_gnn:
@@ -145,7 +145,7 @@ class DGATLayer(nn.Module):
         batch_size = UIDS.shape[0]
         seq_len = UIDS.shape[1]
 
-        qids_extended = QIDS.unsqueeze(dim=2).repeat(1, 1, 10).view(batch_size, seq_len) # [batch_size, seq_len]
+        qids_extended = QIDS.repeat(1, self.args.max_d_num) 
         qids_extended = qids_extended.unsqueeze(dim=2).repeat(1, 1, self.args.inter_neigh_sample) # [batch_size, seq_len, inter_neigh_sample]
         qids_embed = self.qid_embedding(qids_extended) # [batch_size, seq_len, inter_neigh_sample, embed_size]
         
@@ -200,14 +200,15 @@ class QueryEncoder(nn.Module):
 
     def forward(self, qid_embed):
         batch_size = qid_embed.shape[0]
-        session_num = qid_embed.shape[1]
         query_state = Variable(torch.zeros(1, batch_size, self.args.hidden_size, device=device))
-        query_outputs, query_state = self.query_gru(qid_embed, query_state) # [batch_size, session_num, hidden_size]
-        query_outputs = query_outputs.repeat(1, 1, 10).view(batch_size, 10 * session_num, self.args.hidden_size) # [batch_size, seq_len, hidden_size]
+        query_outputs, query_state = self.query_gru(qid_embed, query_state) # Çıktı boyutu: [batch_size, 1, hidden_size]
+        
+        # Tek sorgu vektörünü 30 ilanın her biri için kopyala
+        query_outputs = query_outputs.repeat(1, self.args.max_d_num, 1) 
+        
         query_outputs = self.dropout(query_outputs)
         encoded_query = self.activation(self.query_linear(query_outputs))
-
-        return encoded_query # [batch_size, seq_len, embed_size]
+        return encoded_query
 
 class DocEncoder(nn.Module):
     def __init__(self, args, query_size, doc_size, vtype_size, dataset):

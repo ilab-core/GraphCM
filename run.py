@@ -64,7 +64,7 @@ def parse_args():
                                 help='size of the vtype embeddings')
     model_settings.add_argument('--hidden_size', type=int, default=128,
                                 help='size of RNN hidden units')
-    model_settings.add_argument('--max_d_num', type=int, default=10,
+    model_settings.add_argument('--max_d_num', type=int, default=30,
                                 help='max number of docs in a session')
     model_settings.add_argument('--use_pretrain_embed', action='store_true',
                                 help='whether use pretrained embeddings')
@@ -153,7 +153,7 @@ def valid(args, dataset):
     for i in range(args.num_iter):
         valid_batches = dataset.gen_mini_batches(
             'valid', args.batch_size, shuffle=False) #('valid', dataset.validset_size, shuffle=False) eski hal
-        valid_click_loss, valid_rel_loss, perplexity = model.evaluate(
+        valid_click_loss, perplexity = model.evaluate(
             valid_batches, dataset)
         sum_click_loss += valid_click_loss
         sum_perplexity += perplexity
@@ -188,7 +188,7 @@ def test(args, dataset):
     for i in range(args.num_iter):
         test_batches = dataset.gen_mini_batches(
             'test', args.batch_size, shuffle=False)# ('test', dataset.testset_size, shuffle=False) eski hal
-        test_click_loss, test_rel_loss, perplexity = model.evaluate(
+        test_click_loss, perplexity = model.evaluate(
             test_batches, dataset)
         sum_click_loss += test_click_loss
         sum_perplexity += perplexity
@@ -203,11 +203,9 @@ def test(args, dataset):
         # Print perplexity for each iteration
         print(f"✅ Test Perplexity: {perplexity:.4f}")
 
-
+"""
 def rank(args, dataset):
-    """
-    ranking performance on test files
-    """
+
     logger = logging.getLogger("GraphCM")
     logger.info('Initialize the model...')
     model = Model(args, dataset.query_size, dataset.doc_size,
@@ -232,7 +230,7 @@ def rank(args, dataset):
                 'final_NDCG/avg_{}'.format(trunc_level), sum_ndcgs[trunc_level] / (i + 1), i)
             summary_writer.add_scalar(
                 'final_NDCG/{}'.format(trunc_level), ndcgs[trunc_level], i)
-
+"""
 
 def run():
     """
