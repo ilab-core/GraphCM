@@ -12,7 +12,7 @@ def analyze_graph(file_path, graph_name):
         # .pth dosyasını yükle
         edge_index = torch.load(file_path)
         
-        # Eğer graf boşsa (hiç kenar yoksa)
+        # Eğer graf boşsa 
         if edge_index.shape[1] == 0:
             print(f"Graf boş veya hatalı: {file_path}")
             print("-" * 25 + "\n")
@@ -26,7 +26,6 @@ def analyze_graph(file_path, graph_name):
         # ama derece hesaplaması için yeterlidir.
         num_nodes = edge_index.max().item() + 1
         
-        # Her düğümün derecesini (bağlantı sayısını) hesapla
         # edge_index[0] kaynak düğümleri içerir
         node_degrees = degree(edge_index[0], num_nodes=num_nodes)
         

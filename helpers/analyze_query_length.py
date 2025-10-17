@@ -2,7 +2,7 @@
 
 import argparse
 import os
-import re # Regular Expression modülünü ekliyoruz
+import re 
 from tqdm import tqdm
 
 def analyze_log_file(filepath):
@@ -16,9 +16,9 @@ def analyze_log_file(filepath):
         return
 
     total_q_count = 0
-    q_gt_10_count = 0  # Kırpılacaklar: İlan sayısı > 10
-    q_lt_10_count = 0  # Doldurulacaklar: İlan sayısı < 10
-    q_eq_10_count = 0  # Tam Uyanlar: İlan sayısı == 10
+    q_gt_10_count = 0  
+    q_lt_10_count = 0  
+    q_eq_10_count = 0  
 
     try:
         print("-> Toplam satır sayısı hesaplanıyor...")
@@ -32,7 +32,6 @@ def analyze_log_file(filepath):
     print("-> Dosya içeriği analiz ediliyor...")
     with open(filepath, 'r', encoding='utf-8') as f:
         for line in tqdm(f, total=total_lines, desc="   İşleniyor"):
-            # --- NİHAİ DÜZELTME BURADA ---
             # Satırı, tab/boşluk fark etmeksizin tüm boşluk karakterlerinden böler.
             # re.split(r'\s+', line.strip()) komutu, satırı bir veya daha fazla boşluk karakterinden böler.
             parts = re.split(r'\s+', line.strip())

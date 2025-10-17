@@ -4,31 +4,39 @@ import pandas as pd
 import json
 import os
 import sys
+import argparse
+from tqdm import tqdm
 
 def analyze_interactions(data_file_path):
     """
-    Veri setindeki (sorgu, doküman) çiftlerinin gösterim, tıklanma sayılarını 
-    ve pozisyonlarını analiz eder.
+    Veri setindeki (sorgu, doküman) çiftlerinin gösterim, tıklanma sayılarını
+    ve pozisyonlarını analiz eder. 5 sütunlu ve padding ID'si 0 olan formata göre güncellenmiştir.
     """
     interactions = []
     
-    print(f"\n{data_file_path} dosyası okunuyor ve analiz ediliyor...")
+    print(f"\n'{os.path.basename(data_file_path)}' dosyası okunuyor ve analiz ediliyor...")
 
     if not os.path.exists(data_file_path):
         print(f"HATA: Dosya bulunamadı: {data_file_path}")
         return None, None
 
-    with open(data_file_path, 'r') as f:
-        for line in f:
+    with open(data_file_path, 'r', encoding='utf-8') as f:
+        for line in tqdm(f, desc="   Satırlar işleniyor"):
             try:
                 parts = line.strip().split('\t')
-                if len(parts) != 5: continue # Satırın 5 sütunlu olduğundan emin ol
+                # DÜZELTME: Sütun sayısı kontrolü 5 olarak güncellendi.
+                if len(parts) != 5:
+                    continue
                 
                 query_id = int(parts[1])
                 doc_ids = json.loads(parts[2])
                 clicks = json.loads(parts[4])
                 
                 for i, (doc_id, click) in enumerate(zip(doc_ids, clicks)):
+                    # DÜZELTME: Padding ID'sinin 0 olduğunu varsayıyoruz.
+                    if doc_id == 0:
+                        continue
+                    
                     interactions.append({
                         'query_id': query_id,
                         'doc_id': doc_id,
@@ -39,42 +47,35 @@ def analyze_interactions(data_file_path):
                 print(f"UYARI: Hatalı formatlı satır atlandı: {line.strip()} - Hata: {e}")
                 continue
 
-
     if not interactions:
-        print("Hiç etkileşim bulunamadı.")
+        print("Hiç geçerli etkileşim bulunamadı.")
         return None, None
 
     # Etkileşimleri bir pandas DataFrame'e dönüştürelim
     full_df = pd.DataFrame(interactions)
     
     # Her bir (sorgu, doküman) çifti için genel istatistikleri hesaplayalım
+    print("\n-> İstatistikler hesaplanıyor...")
     stats_df = full_df.groupby(['query_id', 'doc_id']).agg(
         impression_count=('click', 'count'),
         click_count=('click', 'sum')
     ).reset_index()
     
-    stats_df['ctr'] = (stats_df['click_count'] / stats_df['impression_count']).round(3)
+    stats_df['ctr'] = (stats_df['click_count'] / stats_df['impression_count']).round(4)
     
     print("Analiz Tamamlandı.")
     
-    # İki DataFrame'i de döndür: genel istatistikler ve tüm etkileşimler
     return stats_df, full_df
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="GraphCM veri setindeki etkileşimleri analiz eder.")
+    parser.add_argument('set_to_analyze', choices=['train', 'test'], help="Analiz edilecek set (train veya test).")
+    parser.add_argument('--data-dir', default='data/emj_30ilan', help="İşlenmiş verilerin bulunduğu klasör.")
     
-    # Script'in argüman almasını sağla (train, valid veya test)
-    if len(sys.argv) < 2 or sys.argv[1] not in ['train', 'valid', 'test']:
-        print("HATA: Lütfen analiz edilecek seti belirtin.")
-        print("Örnek Kullanım: python helpers/analyze_data.py train")
-        sys.exit(1)
-        
-    set_to_analyze = sys.argv[1]
-
-    # Dosya yolunu dinamik olarak oluştur
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_file = os.path.join(PROJECT_ROOT, 'data', 'emj', f'{set_to_analyze}_per_query_quid.txt')
+    args = parser.parse_args()
     
-    # Ana analiz fonksiyonunu çalıştır
+    data_file = os.path.join(args.data_dir, f'{args.set_to_analyze}_per_query_quid.txt')
+    
     analysis_results, all_interactions_df = analyze_interactions(data_file)
 
     if analysis_results is not None:
@@ -110,7 +111,7 @@ if __name__ == "__main__":
         overall_ctr = total_clicks / total_impressions if total_impressions > 0 else 0
         
         print(f"Genel İstatistikler:")
-        print(f"  - Toplam Gösterim: {total_impressions:,}")
+        print(f"  - Toplam Gerçek Gösterim: {total_impressions:,}")
         print(f"  - Toplam Tıklanma: {total_clicks:,}")
         print(f"  - Genel Ortalama CTR: {overall_ctr:.4f}")
         
@@ -123,3 +124,7 @@ if __name__ == "__main__":
             print(f"  - Pozisyon 1 Gösterimleri: {pos1_impressions:,}")
             print(f"  - Pozisyon 1 Tıklamaları: {pos1_clicks:,}")
             print(f"  - Pozisyon 1 Ortalama CTR: {pos1_ctr:.4f}")
+
+if __name__ == "__main__":
+    main()
+
