@@ -10,18 +10,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-
-# PATH ayarları
 ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(ROOT_DIR, '..'))
-
-# Custom modüller
 from utils import *
 import config 
 
-# =======================================================================================
-# === DEĞİŞTİRİLEN BÖLÜM: Bellek sorununu çözen yeni fonksiyon ===
-# =======================================================================================
 
 def process_data_in_stream(args):
     """
@@ -47,7 +40,6 @@ def process_data_in_stream(args):
     session_sid, query_qid, url_uid = {'': 0}, {'': 0}, {'': 0}
     junk_click_cnt = 0
     
-    #for session_id_str, elements_list in tqdm(sessions_map.items(), desc=" - Oturumlar işleniyor"):
     for session_id_str in tqdm(sorted(sessions_map.keys()), desc=" - Oturumlar işleniyor"):
         elements_list = sessions_map[session_id_str]
 
@@ -66,7 +58,7 @@ def process_data_in_stream(args):
                     query_qid[query] = len(query_qid)
                 
                 uids = []
-                urls_domains = elements[-10:]
+                urls_domains = elements[-30:]
                 for url_domain in urls_domains:
                     url = url_domain.split(',')[0]
                     if url not in url_uid:
@@ -75,7 +67,7 @@ def process_data_in_stream(args):
                 
                 session_data['qids'].append(query_qid[query])
                 session_data['uidsS'].append(uids)
-                session_data['clicksS'].append([0] * 10)
+                session_data['clicksS'].append([0] * 30)
 
             elif elements[2] == 'C':
                 if not session_data['uidsS']: continue
@@ -130,16 +122,14 @@ def process_data_in_stream(args):
                             final_url_uid[uid_orig] = len(final_url_uid)
                         uids_final.append(final_url_uid[uid_orig])
                     
-                    f.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_final, str(uids_final), str([1] * 10), str(clicks)))
+                    f.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid_final, str(uids_final), str([1] * 30), str(clicks)))
 
     print(' - Final sözlükler kaydediliyor...')
     save_dict(args.output, 'query_qid.dict', final_query_qid)
     save_dict(args.output, 'url_uid.dict', final_url_uid)
 
 
-# =========================================================================
-# === ORİJİNAL FONKSİYONLAR ===
-# =========================================================================
+# ORİJİNAL FONKSİYONLAR
 
 def construct_dgat_graph(args):
     # load entity dictionaries
@@ -147,8 +137,7 @@ def construct_dgat_graph(args):
     query_qid = load_dict(args.output, 'query_qid.dict')
     url_uid = load_dict(args.output, 'url_uid.dict')
 
-    # Calc edge information for train/valid/test set
-    # set_names = ['demo']
+    # Calc edge information for train/valid/test sets
     set_names = ['train', 'valid', 'test']
     qid_edges, uid_edges = set(), set()
     qid_neighbors, uid_neighbors = {qid: set() for qid in range(len(query_qid))}, {uid: set() for uid in range(len(url_uid))}
@@ -286,9 +275,9 @@ def generate_dataset_for_cold_start(args):
                     assert len(uids) == len(qids)
                     assert len(vids) == len(qids)
                     assert len(clicks) == len(qids)
-                    assert len(vids[0]) == 10
-                    assert len(uids[0]) == 10
-                    assert len(clicks[0]) == 10
+                    assert len(vids[0]) == 30
+                    assert len(uids[0]) == 30
+                    assert len(clicks[0]) == 30
                     data_set.append({'sid': previous_sid,
                                      'qids': qids,
                                      'uids': uids,
@@ -365,8 +354,6 @@ def generate_dataset_for_cold_start(args):
     print('    - {}'.format('Cold D session num: {}'.format(len(cold_d))))
     print('    - {}'.format('Cold QD session num: {}'.format(len(cold_qd))))
     print('    - {}'.format('Warm QD session num: {}'.format(len(warm_qd))))
-
-    # Save the four session sets back to files
     print('    - {}'.format('Write back cold_q set'))
     file = open(os.path.join(args.output, 'cold_q_test_per_query_quid.txt'), 'w')
     for session_info in cold_q:
@@ -378,8 +365,7 @@ def generate_dataset_for_cold_start(args):
         for qid, uids, vids, clicks in zip(qids, uidsS, vidsS, clicksS):
             file.write("{}\t{}\t{}\t{}\t{}\n".format(sid, qid, str(uids), str(vids), str(clicks)))
     file.close()
-    # ... (Diğer setler için aynı mantık) ...
-
+ 
 
 def compute_sparsity(args):
     # load entity dictionaries
@@ -427,6 +413,10 @@ def main():
     parser.add_argument('--trainset_ratio', type=float, default=0.8)
     parser.add_argument('--validset_ratio', type=float, default=0.1)
     args = parser.parse_args()
+
+    if not os.path.exists(args.output):
+        print(f" - Çıktı klasörü bulunamadı, '{args.output}' oluşturuluyor...")
+        os.makedirs(args.output)
     
     send_slack_message(config.SLACK_CONFIG, f"Yandex.py Veri Ön İşleme Süreci Başladı.\n> `Arguments: {args}`")
     try:
