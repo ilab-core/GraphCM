@@ -175,7 +175,7 @@ class Model(object):
 
                 torch.cuda.empty_cache() 
 
-                # --- YENİ EKLENEN BÖLÜM: Metrikleri CSV'ye Yazma ---
+                # Metrikleri CSV'ye Yazma ---
                 # Loglanacak tüm metrikleri bir sözlükte toplayalım.
                 log_metrics = {
                     'step': self.global_step,
@@ -191,10 +191,7 @@ class Model(object):
                     f.write(f"{log_metrics['step']},{log_metrics['train_loss']:.6f},{log_metrics['valid_loss']:.6f},"
                             f"{log_metrics['valid_ppl']:.4f},{log_metrics['test_loss']:.6f},{log_metrics['test_ppl']:.4f}\n")
                 self.logger.info(f"Metrikler {self.log_csv_path} dosyasına kaydedildi.")
-                # --- YENİ BÖLÜM SONU ---
 
-                #for trunc_level in self.trunc_levels:
-                #   self.writer.add_scalar("rank/{}".format(trunc_level), ndcgs[trunc_level], self.global_step)
 
                 if valid_perplexity < metric_save:
                     metric_save = valid_perplexity
@@ -227,9 +224,7 @@ class Model(object):
             exit_tag, metric_save, patience = self._train_epoch(train_batches, dataset, metric_save, patience, step_pbar)
 
     def evaluate(self, eval_batches, dataset):
-        # ADIM 1: total_rel_loss buradan kaldırıldı.
         total_click_loss, total_num = 0., 0
-        
         # '10' yerine self.max_d_num kullanıldı.
         perplexity_at_rank = torch.zeros(self.max_d_num, device=device, dtype=torch.float) 
         
@@ -256,7 +251,8 @@ class Model(object):
         
         if total_num > 0:
             click_loss = 1.0 * total_click_loss / total_num
-            perplexity = (2 ** (- perplexity_at_rank / total_num)).sum() / self.max_d_num
+            avg_log_likelihood = perplexity_at_rank.sum() / total_num
+            perplexity = 2 ** (-avg_log_likelihood)
         else:
             # Eğer hiç veri işlenmediyse (boş set), varsayılan değerleri döndür
             click_loss = torch.tensor(0.0)

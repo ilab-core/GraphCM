@@ -3,11 +3,9 @@ import argparse
 import logging
 import os
 import time
-
-import torch  # <-- new
+import torch
 from tensorboardX import SummaryWriter
-
-import config  # <-- new
+import config 
 from dataset import Dataset
 from model import Model
 from utils import *
@@ -30,7 +28,6 @@ def parse_args():
                         help='perform relevance estimation task on human labeled test set')
     parser.add_argument('--num_iter', type=int, default=1,
                         help='the number of duplicated evaluation for valid/test/rank')
-
     train_settings = parser.add_argument_group('train settings')
     train_settings.add_argument('--optim', default='adadelta',
                                 help='optimizer type')
@@ -48,7 +45,6 @@ def parse_args():
                                 help='number of training steps')
     train_settings.add_argument('--reg_relevance', type=float, default=1.0,
                                 help='regularization for relevance training')
-
     model_settings = parser.add_argument_group('model settings')
     model_settings.add_argument('--algo', default='GraphCM',
                                 help='choose the algorithm to use')
@@ -64,7 +60,7 @@ def parse_args():
                                 help='size of the vtype embeddings')
     model_settings.add_argument('--hidden_size', type=int, default=128,
                                 help='size of RNN hidden units')
-    model_settings.add_argument('--max_d_num', type=int, default=30,
+    model_settings.add_argument('--max_d_num', type=int, default=10,
                                 help='max number of docs in a session')
     model_settings.add_argument('--use_pretrain_embed', action='store_true',
                                 help='whether use pretrained embeddings')
@@ -84,7 +80,6 @@ def parse_args():
                                 help='the number of neighbor to be sampled for interaction')
     model_settings.add_argument('--inter_leaky_slope', type=float, default=0.2,
                                 help='leaky slope of leakyrelu for interaction')
-
     path_settings = parser.add_argument_group('path settings')
     path_settings.add_argument('--dataset', default='TianGong-ST',
                                help='name of the dataset to be used')
@@ -96,7 +91,6 @@ def parse_args():
                                help='the dir to write tensorboard summary')
     path_settings.add_argument('--log_dir', default='./outputs/log/',
                                help='path of the log file. If not set, logs are printed to console')
-
     path_settings.add_argument('--eval_freq', type=int, default=100,
                                help='the frequency of evaluating on the valid set when training')
     path_settings.add_argument('--check_point', type=int, default=100,
@@ -203,7 +197,7 @@ def test(args, dataset):
         # Print perplexity for each iteration
         print(f"✅ Test Perplexity: {perplexity:.4f}")
 
-"""
+""" #kullanmıyoruz
 def rank(args, dataset):
 
     logger = logging.getLogger("GraphCM")
@@ -236,7 +230,7 @@ def run():
     """
     Prepares and runs the whole system.
     """
-    # --- SLACK ENTEGRASYONU BAŞLANGIÇ ---
+    # SLACK ENTEGRASYONU
     try:
         # get arguments
         args = parse_args()
@@ -317,7 +311,6 @@ def run():
         # Hata durumunda detaylı bir bildirim gönder
         error_message = f"HATA: GraphCM Modeli çalışırken bir sorun oluştu!\n> *Hata Mesajı:*\n> ```{e}```"
         send_slack_message(config.SLACK_CONFIG, error_message)
-        # Hatayı tekrar fırlatarak programın normal şekilde (hata koduyla) sonlanmasını sağla
         raise e
 
 
