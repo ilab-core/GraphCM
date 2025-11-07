@@ -29,9 +29,9 @@ def parse_args():
     parser.add_argument('--num_iter', type=int, default=1,
                         help='the number of duplicated evaluation for valid/test/rank')
     train_settings = parser.add_argument_group('train settings')
-    train_settings.add_argument('--optim', default='adadelta',
+    train_settings.add_argument('--optim', default='adam',
                                 help='optimizer type')
-    train_settings.add_argument('--learning_rate', type=float, default=0.01,
+    train_settings.add_argument('--learning_rate', type=float, default=0.0005,
                                 help='learning rate')
     train_settings.add_argument('--weight_decay', type=float, default=1e-5,
                                 help='weight decay')
@@ -39,7 +39,7 @@ def parse_args():
                                 help='momentum')
     train_settings.add_argument('--dropout_rate', type=float, default=0.5,
                                 help='dropout rate')
-    train_settings.add_argument('--batch_size', type=int, default=16, #normalde 64
+    train_settings.add_argument('--batch_size', type=int, default=512, #normalde 64
                                 help='train batch size')
     train_settings.add_argument('--num_steps', type=int, default=20000,
                                 help='number of training steps')
