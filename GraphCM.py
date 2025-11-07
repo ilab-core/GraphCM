@@ -91,4 +91,4 @@ class GraphCM(nn.Module):
         # Combination Layer
         pred_logits = self.combine(exams, rels)
 
-        return pred_logits, rels
+        return pred_logits, rels, exams

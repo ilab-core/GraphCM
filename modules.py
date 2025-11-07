@@ -14,9 +14,7 @@ device = torch.device('cuda') if use_cuda else torch.device('cpu')
 INF = 1e30
 MINF = -(1e30)
 
-# NOTE: The feature interaction module should have been implemented in RelEstimator logically.
-#       For the convenience of implementation, we implement it in GNN Layers,
-#       as the embeddings are saved in GNN Layers.
+
 class DGATLayer(nn.Module):
     def __init__(self, args, query_size, doc_size, vtype_size, dataset):
         super(DGATLayer, self).__init__()
@@ -61,10 +59,9 @@ class DGATLayer(nn.Module):
     def forward(self, qids, uids, vids, clicks, use_gnn=True):
 
         # Get click/vid/position embeddings
-        CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click, dtype=np.int64)) for click in clicks], batch_first=True)
+        CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click, dtype=np.int64))[:-1] for click in clicks], batch_first=True)
         VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid, dtype=np.int64)) for vid in vids], batch_first=True)
-        #CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click.cpu(), dtype=np.int64)) for click in clicks], batch_first=True)
-        #VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid.cpu(), dtype=np.int64)) for vid in vids], batch_first=True)
+
         if use_cuda:
             CLICKS, VIDS = CLICKS.cuda(), VIDS.cuda()
         batch_size = CLICKS.shape[0]
@@ -112,16 +109,10 @@ class DGATLayer(nn.Module):
             #qid_embedding = F.embedding(F.embedding(QIDS, argsort_sampled_qid), processed_qid_embed)
             #uid_embedding = F.embedding(F.embedding(UIDS, argsort_sampled_uid), processed_uid_embed)
 
-            # --- DÜZELTİLMİŞ KOD BLOĞU ---
-            # processed_qid_embed matrisini argsort_sampled_qid ile yeniden sırala
             reordered_qid_embed = processed_qid_embed[argsort_sampled_qid]
-            # Şimdi QIDS'i kullanarak bu sıralanmış matristen doğru embedding'leri seç
             qid_embedding = F.embedding(QIDS, reordered_qid_embed)
-
-            # Aynı işlemi uid için de yap
             reordered_uid_embed = processed_uid_embed[argsort_sampled_uid]
             uid_embedding = F.embedding(UIDS, reordered_uid_embed)
-            # --- DÜZELTME SONU ---
 
         else:
             QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid, dtype=np.int64)) for qid in qids], batch_first=True)
@@ -146,24 +137,24 @@ class DGATLayer(nn.Module):
         seq_len = UIDS.shape[1]
 
         qids_extended = QIDS.repeat(1, self.args.max_d_num) 
-        qids_extended = qids_extended.unsqueeze(dim=2).repeat(1, 1, self.args.inter_neigh_sample) # [batch_size, seq_len, inter_neigh_sample]
-        qids_embed = self.qid_embedding(qids_extended) # [batch_size, seq_len, inter_neigh_sample, embed_size]
+        qids_extended = qids_extended.unsqueeze(dim=2).repeat(1, 1, self.args.inter_neigh_sample) 
+        qids_embed = self.qid_embedding(qids_extended) 
         
         uids_perm_idx = torch.randperm(self.uid_neighbors.weight.data.shape[1], device=device)
-        uids_neigh_idx = self.uid_neighbors(UIDS)[:, :, uids_perm_idx[:self.args.inter_neigh_sample]] # [batch_size, seq_len, inter_neigh_sample]
-        uids_neigh = self.uid_embedding(uids_neigh_idx.to(torch.int64)) # [batch_size, seq_len, inter_neigh_sample, embed_size]
+        uids_neigh_idx = self.uid_neighbors(UIDS)[:, :, uids_perm_idx[:self.args.inter_neigh_sample]] 
+        uids_neigh = self.uid_embedding(uids_neigh_idx.to(torch.int64)) 
         
-        qu_interactions = qids_embed.mul(uids_neigh) # [batch_size, seq_len, inter_neigh_sample, embed_size]
+        qu_interactions = qids_embed.mul(uids_neigh) 
         
-        attention_weights = torch.cat([qids_embed, uids_neigh], dim=3) # [batch_size, seq_len, inter_neigh_sample, embed_size * 2]
-        attention_weights = self.interact_attention(attention_weights).squeeze(dim=3) # [batch_size, seq_len, inter_neigh_sample]
-        attention_weights = torch.exp(self.interact_activation(attention_weights)) # [batch_size, seq_len, inter_neigh_sample]
-        attention_weights = attention_weights / attention_weights.sum(dim=2).unsqueeze(dim=2) # [batch_size, seq_len, inter_neigh_sample]
+        attention_weights = torch.cat([qids_embed, uids_neigh], dim=3) 
+        attention_weights = self.interact_attention(attention_weights).squeeze(dim=3) 
+        attention_weights = torch.exp(self.interact_activation(attention_weights)) 
+        attention_weights = attention_weights / attention_weights.sum(dim=2).unsqueeze(dim=2) 
         
-        qu_interactions = qu_interactions.mul(attention_weights.unsqueeze(dim=3)) # [batch_size, seq_len, inter_neigh_sample, embed_size]
-        qu_interactions = qu_interactions.sum(dim=2) # [batch_size, seq_len, embed_size]
+        qu_interactions = qu_interactions.mul(attention_weights.unsqueeze(dim=3)) 
+        qu_interactions = qu_interactions.sum(dim=2) 
         
-        return qu_interactions # [batch_size, seq_len, embed_size]
+        return qu_interactions 
 
 class ExamPredictor(nn.Module):
     def __init__(self, args, query_size, doc_size, vtype_size, dataset):

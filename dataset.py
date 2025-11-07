@@ -54,7 +54,7 @@ class Dataset(object):
         qids = [int(attr[1].strip())]
         uids = json.loads(attr[2].strip())
         vids = json.loads(attr[3].strip())
-        clicks = json.loads(attr[4].strip())
+        clicks = [0] + json.loads(attr[4].strip())
 
         # Gerçek ilan sayısını, PADDING ID'Sİ (0) olmayanlara bakarak buluyoruz.
         actual_len = len([uid for uid in uids if uid != self.padding_uid])
@@ -89,7 +89,7 @@ class Dataset(object):
             batch_data['clicks'].append(sample['clicks'])
             batch_data['masks'].append(sample['mask'])
             batch_data['last_ranks'].append(sample['last_rank'])
-            batch_data['true_clicks'].append(sample['clicks'])
+            batch_data['true_clicks'].append(sample['clicks'][1:])
             
         return batch_data
 
