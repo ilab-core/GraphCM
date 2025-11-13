@@ -7,7 +7,7 @@ import numpy as np
 import logging
 import torch.nn.utils.rnn as rnn_utils
 from torch_geometric.nn import GATConv
-from torch_geometric.data import NeighborSampler
+from torch_geometric.loader import NeighborSampler
 
 use_cuda = torch.cuda.is_available()
 device = torch.device('cuda') if use_cuda else torch.device('cpu')
@@ -43,8 +43,7 @@ class DGATLayer(nn.Module):
         if args.use_gnn:
             self.qid_edge_index = torch.load(os.path.join(self.data_dir, 'dgat_qid_edge_index.pth'))
             self.uid_edge_index = torch.load(os.path.join(self.data_dir, 'dgat_uid_edge_index.pth'))
-            if use_cuda:
-                self.qid_edge_index, self.uid_edge_index = self.qid_edge_index.cuda(), self.uid_edge_index.cuda()
+            self.qid_edge_index, self.uid_edge_index = self.qid_edge_index.to(device), self.uid_edge_index.to(device)
             out_channel = self.args.embed_size // self.args.gnn_att_heads if self.args.gnn_concat else self.args.embed_size
             self.qid_GAT = GATConv(self.args.embed_size, out_channel, heads=self.args.gnn_att_heads,
                                     concat=self.args.gnn_concat, negative_slope=self.args.gnn_leaky_slope, dropout=self.args.gnn_dropout)
@@ -62,8 +61,7 @@ class DGATLayer(nn.Module):
         CLICKS = rnn_utils.pad_sequence([torch.from_numpy(np.array(click, dtype=np.int64))[:-1] for click in clicks], batch_first=True)
         VIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(vid, dtype=np.int64)) for vid in vids], batch_first=True)
 
-        if use_cuda:
-            CLICKS, VIDS = CLICKS.cuda(), VIDS.cuda()
+        CLICKS, VIDS = CLICKS.to(device), VIDS.to(device)
         batch_size = CLICKS.shape[0]
         seq_len = CLICKS.shape[1]
         click_embedding = self.click_embedding(CLICKS)  # [batch_size, seq_len, click_embed_size]
@@ -74,16 +72,15 @@ class DGATLayer(nn.Module):
         if use_gnn:
             qid_neighbor_sampler =  NeighborSampler(self.qid_edge_index, node_idx=None, sizes=[self.args.gnn_neigh_sample],
                                                     batch_size=self.query_size, return_e_id =False,
-                                                    shuffle=True, num_workers=0) # num_workers=0 olarak değiştirildi
+                                                    shuffle=True, num_workers=2) 
             uid_neighbor_sampler =  NeighborSampler(self.uid_edge_index, node_idx=None, sizes=[self.args.gnn_neigh_sample],
                                                     batch_size=self.doc_size, return_e_id =False,
-                                                    shuffle=True, num_workers=0) # num_workers=0 olarak değiştirildi
+                                                    shuffle=True, num_workers=2) 
             cnt = 0
             for _, sampled_qid, sampled_index_tuple in qid_neighbor_sampler:
                 assert cnt < 1
                 cnt += 1
-                if use_cuda:
-                    sampled_qid, sampled_index = sampled_qid.cuda(), sampled_index_tuple[0].cuda()
+                sampled_qid, sampled_index = sampled_qid.to(device), sampled_index_tuple[0].to(device)
                 sampled_qid_embed = self.qid_embedding(sampled_qid)
                 processed_qid_embed = F.relu(self.qid_GAT(sampled_qid_embed, sampled_index).type(torch.float))
                 argsort_sampled_qid = torch.argsort(sampled_qid)
@@ -91,8 +88,7 @@ class DGATLayer(nn.Module):
             for _, sampled_uid, sampled_index_tuple in uid_neighbor_sampler:
                 assert cnt < 1
                 cnt += 1
-                if use_cuda:
-                    sampled_uid, sampled_index = sampled_uid.cuda(), sampled_index_tuple[0].cuda()
+                sampled_uid, sampled_index = sampled_uid.to(device), sampled_index_tuple[0].to(device)
                 sampled_uid_embed = self.uid_embedding(sampled_uid)
                 processed_uid_embed = F.relu(self.uid_GAT(sampled_uid_embed, sampled_index).type(torch.float))
                 argsort_sampled_uid = torch.argsort(sampled_uid)
@@ -101,8 +97,7 @@ class DGATLayer(nn.Module):
             UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)
             #QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid.cpu(), dtype=np.int64)) for qid in qids], batch_first=True)
             #UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid.cpu(), dtype=np.int64)) for uid in uids], batch_first=True)
-            if use_cuda:
-                QIDS, UIDS = QIDS.cuda(), UIDS.cuda()
+            QIDS, UIDS = QIDS.to(device), UIDS.to(device)
 
 
             #weight must be a 2D tensor error --> alttaki iki kod satırı silindi
@@ -119,8 +114,8 @@ class DGATLayer(nn.Module):
             UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)
             #QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid.cpu(), dtype=np.int64)) for qid in qids], batch_first=True)
             #UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid.cpu(), dtype=np.int64)) for uid in uids], batch_first=True)
-            if use_cuda:
-                QIDS, UIDS = QIDS.cuda(), UIDS.cuda()
+
+            QIDS, UIDS = QIDS.to(device), UIDS.to(device)
             qid_embedding = self.qid_embedding(QIDS)
             uid_embedding = self.uid_embedding(UIDS)
             
@@ -131,8 +126,7 @@ class DGATLayer(nn.Module):
         seq_len = len(uids[0])
         QIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(qid, dtype=np.int64)) for qid in qids], batch_first=True)
         UIDS = rnn_utils.pad_sequence([torch.from_numpy(np.array(uid, dtype=np.int64)) for uid in uids], batch_first=True)
-        if use_cuda:
-            QIDS, UIDS = QIDS.cuda(), UIDS.cuda()
+        QIDS, UIDS = QIDS.to(device), UIDS.to(device)
         batch_size = UIDS.shape[0]
         seq_len = UIDS.shape[1]
 

@@ -36,10 +36,9 @@ class Model(object):
 
         # GraphCM
         self.model = GraphCM(args, query_size, doc_size, vtype_size, dataset)
+        self.model.to(device) 
         if args.data_parallel:
             self.model = nn.DataParallel(self.model)
-        if use_cuda:
-            self.model = self.model.cuda()
         self.optimizer = self.create_train_op()
         self.loss_criterion = nn.BCELoss(reduction='none')
         
@@ -131,8 +130,7 @@ class Model(object):
             # .sum() burada toplam True sayısını verir.
             query_num = MASK.sum()
 
-            if use_cuda:
-                TRUE_CLICKS, MASK = TRUE_CLICKS.cuda(), MASK.cuda()
+            TRUE_CLICKS, MASK = TRUE_CLICKS.to(device), MASK.to(device)
 
             self.model.train()
             self.optimizer.zero_grad()
@@ -238,8 +236,7 @@ class Model(object):
                 # MASK.sum() bunu doğrudan ve en doğru şekilde verir.
                 query_num = MASK.sum()
 
-                if use_cuda:
-                    TRUE_CLICKS, MASK = TRUE_CLICKS.cuda(), MASK.cuda()
+                TRUE_CLICKS, MASK = TRUE_CLICKS.to(device), MASK.to(device)
 
                 self.model.eval()
                 pred_logits, pred_rels = self.model(batch['qids'], batch['uids'], batch['vids'], batch['clicks'])
@@ -271,7 +268,7 @@ class Model(object):
                 self.model.eval()
                 true_relevances_batches = batch['relevances']
                 pred_logits, pred_rels = self.model(batch['qids'], batch['uids'], batch['vids'], batch['clicks'])
-                relevances_batches = torch.zeros(pred_logits.shape[0], self.max_d_num)
+                relevances_batches = torch.zeros(pred_logits.shape[0], self.max_d_num, device=device)
                 for r_idx, relevance_start in enumerate(batch['relevance_starts']): 
                     relevances_batches[r_idx] = pred_logits[r_idx, relevance_start : relevance_start + self.max_d_num]
                 relevances_batches = relevances_batches.data.cpu().numpy().tolist()
@@ -327,12 +324,9 @@ class Model(object):
         Load the model from model_dir with model_prefix as the model indicator
         """
         optimizer_path = os.path.join(model_dir, model_prefix + '_{}.optimizer'.format(global_step))
-        self.optimizer.load_state_dict(torch.load(optimizer_path))
+        self.optimizer.load_state_dict(torch.load(optimizer_path, map_location=device))
         self.logger.info('Optimizer restored from {}, with prefix {} and global step {}.'.format(model_dir, model_prefix, global_step))
         model_path = os.path.join(model_dir, model_prefix + '_{}.model'.format(global_step))
-        if use_cuda:
-            state_dict = torch.load(model_path)
-        else:
-            state_dict = torch.load(model_path, map_location=lambda storage, loc: storage)
+        state_dict = torch.load(model_path, map_location=device)
         self.model.load_state_dict(state_dict)
         self.logger.info('Model restored from {}, with prefix {} and global step {}.'.format(model_dir, model_prefix, global_step))

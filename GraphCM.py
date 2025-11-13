@@ -32,22 +32,22 @@ class GraphCM(nn.Module):
 
         # Combination Layer
         if self.args.combine == 'exp_mul':
-            self.lamda = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.mu = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+            self.lamda = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.mu = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
             self.lamda.data.fill_(1.0)
             self.mu.data.fill_(1.0)
         elif self.args.combine == 'linear':
-            self.alpha = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.beta = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+            self.alpha = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.beta = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
             self.alpha.data.fill_(0.5)
             self.beta.data.fill_(0.5)
         elif self.args.combine == 'nonlinear':
-            self.w11 = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.w12 = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.w21 = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.w22 = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.w31 = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.w32 = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
+            self.w11 = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.w12 = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.w21 = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.w22 = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.w31 = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
+            self.w32 = nn.Parameter(torch.empty(1, device=device), requires_grad=True)
             self.w11.data.fill_(0.5)
             self.w12.data.fill_(0.5)
             self.w21.data.fill_(0.5)
@@ -91,4 +91,4 @@ class GraphCM(nn.Module):
         # Combination Layer
         pred_logits = self.combine(exams, rels)
 
-        return pred_logits, rels, exams
+        return pred_logits, rels
